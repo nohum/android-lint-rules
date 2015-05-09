@@ -58,7 +58,7 @@ public class ResourceIdNamingConventionDetector extends ResourceXmlDetector {
         if (element.hasAttributeNS(SdkConstants.ANDROID_URI, SdkConstants.ATTR_ID)) {
             String id = element.getAttributeNS(SdkConstants.ANDROID_URI, SdkConstants.ATTR_ID); // returns something like: @+id/string
             if (id != null && !id.isEmpty()) {
-                if (id.startsWith("@android:id/")) { // @android are system special ids
+                if (id.startsWith(SdkConstants.ANDROID_ID_PREFIX)) { // ignore system special ids
                     return;
                 }
 
