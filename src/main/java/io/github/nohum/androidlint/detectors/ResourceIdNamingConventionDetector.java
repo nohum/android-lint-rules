@@ -22,17 +22,17 @@ public class ResourceIdNamingConventionDetector extends ResourceXmlDetector {
             "ResourceIdNaming",
             "Naming of resource id is not following conventions",
             "Resource ids should typically follow the convention of being named in " +
-            "underscore_casing instead of e.g. camelCasing. This is to maintain " +
-            "consistency with the rest of the identifiers used by Android.",
+                    "underscore_casing instead of e.g. camelCasing. This is to maintain " +
+                    "consistency with the rest of the identifiers used by Android.",
             Category.CORRECTNESS,
             4,
             Severity.WARNING,
             new Implementation(ResourceIdNamingConventionDetector.class, Scope.ALL_RESOURCES_SCOPE));
 
-    // besides the listed below, there are further ignored elements (e.g. "style" - TAG_STYLE). we ignore them as
+    // besides the listed below, there are further ignored elements (e.g. "style", "item"). we ignore them as
     // they use a completely different naming scheme
     private static final List<String> ALLOWED_NAMED_ELEMENTS = Arrays.asList(SdkConstants.TAG_STRING_ARRAY,
-            SdkConstants.TAG_ARRAY, SdkConstants.TAG_ITEM, SdkConstants.TAG_PLURALS, SdkConstants.TAG_INTEGER_ARRAY,
+            SdkConstants.TAG_ARRAY, SdkConstants.TAG_PLURALS, SdkConstants.TAG_INTEGER_ARRAY,
             SdkConstants.TAG_STRING, SdkConstants.TAG_COLOR, SdkConstants.TAG_DIMEN, "integer", "bool");
 
     private static final Pattern ALLOWED_NAMING_PATTERN = Pattern.compile("[a-z0-9_]*");
@@ -56,10 +56,13 @@ public class ResourceIdNamingConventionDetector extends ResourceXmlDetector {
 
         // true for layout elements, menu items, ...
         if (element.hasAttributeNS(SdkConstants.ANDROID_URI, SdkConstants.ATTR_ID)) {
-            String id = element.getAttributeNS(SdkConstants.ANDROID_URI, SdkConstants.ATTR_ID);
-            if (id != null && !id.isEmpty()) { // returns something like: @+id/user_chosen_string
-                String strippedId = LintUtils.stripIdPrefix(id); // stripIdPrefix strips the "@+id/" part
+            String id = element.getAttributeNS(SdkConstants.ANDROID_URI, SdkConstants.ATTR_ID); // returns something like: @+id/string
+            if (id != null && !id.isEmpty()) {
+                if (id.startsWith("@android:id/")) { // @android are system special ids
+                    return;
+                }
 
+                String strippedId = LintUtils.stripIdPrefix(id); // stripIdPrefix strips the "@+id/" part
                 if (!isFollowingNamingConvention(strippedId)) {
                     report(context, element, correctIdentifier(strippedId));
                 }
