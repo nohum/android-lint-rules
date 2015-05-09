@@ -7,9 +7,9 @@ import com.android.tools.lint.client.api.IssueRegistry;
 import com.android.tools.lint.detector.api.Issue;
 import io.github.nohum.androidlint.detectors.ResourceIdNamingConventionDetector;
 
-public class AddedIssuesRegistry extends IssueRegistry {
+public class ExtensionIssueRegistry extends IssueRegistry {
 
-    public AddedIssuesRegistry() {
+    public ExtensionIssueRegistry() {
     }
 
     @Override

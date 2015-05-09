@@ -20,7 +20,7 @@ dependencies {
 
 jar {
     manifest {
-        attributes("Lint-Registry": "io.github.nohum.androidlint.AddedIssuesRegistry")
+        attributes("Lint-Registry": "io.github.nohum.androidlint.ExtensionIssueRegistry")
     }
 }
 
