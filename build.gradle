@@ -1,0 +1,35 @@
+apply plugin: 'java'
+
+sourceCompatibility = 1.7
+version = '1.0-SNAPSHOT'
+
+def props = new Properties()
+file("local.properties").withInputStream {
+    stream -> props.load(stream)
+}
+
+repositories {
+   jcenter()
+}
+
+dependencies {
+    compile 'com.android.tools.lint:lint-api:24.2.2'
+    compile 'com.android.tools.lint:lint-checks:24.2.2'
+    testCompile 'junit:junit:4.11'
+}
+
+jar {
+    manifest {
+        attributes("Lint-Registry": "googleio.demo.MyIssueRegistry")
+    }
+}
+
+uploadArchives {
+    repositories {
+        flatDir {
+            dirs props['uploadArchives.flat.destination.directory']
+        }
+    }
+}
+
+defaultTasks 'assemble'
