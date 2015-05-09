@@ -29,10 +29,11 @@ public class ResourceIdNamingConventionDetector extends ResourceXmlDetector {
             Severity.WARNING,
             new Implementation(ResourceIdNamingConventionDetector.class, Scope.ALL_RESOURCES_SCOPE));
 
-    // besides the listed below, there are further ignored elements (e.g. "style"). we ignore them as they
-    // use a completely different naming scheme
-    private static final List<String> ALLOWED_NAMED_ELEMENTS = Arrays.asList("string", "string-array", "dimen", "item",
-            "integer", "integer-array", "color", "array", "bool", "plurals");
+    // besides the listed below, there are further ignored elements (e.g. "style" - TAG_STYLE). we ignore them as
+    // they use a completely different naming scheme
+    private static final List<String> ALLOWED_NAMED_ELEMENTS = Arrays.asList(SdkConstants.TAG_STRING_ARRAY,
+            SdkConstants.TAG_ARRAY, SdkConstants.TAG_ITEM, SdkConstants.TAG_PLURALS, SdkConstants.TAG_INTEGER_ARRAY,
+            SdkConstants.TAG_STRING, SdkConstants.TAG_COLOR, SdkConstants.TAG_DIMEN, "integer", "bool");
 
     private static final Pattern ALLOWED_NAMING_PATTERN = Pattern.compile("[a-z0-9_]*");
 
