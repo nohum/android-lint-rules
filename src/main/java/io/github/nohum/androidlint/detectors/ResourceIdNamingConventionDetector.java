@@ -47,12 +47,6 @@ public class ResourceIdNamingConventionDetector extends ResourceXmlDetector {
                 || folderType == ResourceFolderType.MENU || folderType == ResourceFolderType.VALUES;
     }
 
-    @NonNull
-    @Override
-    public Speed getSpeed() {
-        return Speed.NORMAL;
-    }
-
     @Override
     public void visitElement(XmlContext context, Element element) {
         if (!context.isEnabled(ISSUE)) {
