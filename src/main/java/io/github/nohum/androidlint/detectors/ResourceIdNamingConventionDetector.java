@@ -6,7 +6,6 @@ import com.android.resources.ResourceFolderType;
 import com.android.tools.lint.detector.api.*;
 import org.w3c.dom.Element;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
