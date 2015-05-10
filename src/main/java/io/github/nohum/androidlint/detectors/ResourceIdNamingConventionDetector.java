@@ -48,10 +48,6 @@ public class ResourceIdNamingConventionDetector extends ResourceXmlDetector {
 
     @Override
     public void visitElement(XmlContext context, Element element) {
-        if (!context.isEnabled(ISSUE)) {
-            return;
-        }
-
         // true for layout elements, menu items, ...
         if (element.hasAttributeNS(ANDROID_URI, ATTR_ID)) {
             String id = element.getAttributeNS(ANDROID_URI, ATTR_ID); // returns something like: @+id/string
