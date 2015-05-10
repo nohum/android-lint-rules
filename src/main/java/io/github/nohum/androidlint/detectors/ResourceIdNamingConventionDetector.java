@@ -1,7 +1,6 @@
 package io.github.nohum.androidlint.detectors;
 
 import com.android.SdkConstants;
-import com.android.annotations.NonNull;
 import com.android.resources.ResourceFolderType;
 import com.android.tools.lint.detector.api.*;
 import org.w3c.dom.Element;
