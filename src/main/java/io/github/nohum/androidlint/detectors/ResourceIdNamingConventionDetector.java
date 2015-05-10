@@ -1,6 +1,6 @@
 package io.github.nohum.androidlint.detectors;
 
-import com.android.SdkConstants;
+import static com.android.SdkConstants.*;
 import com.android.resources.ResourceFolderType;
 import com.android.tools.lint.detector.api.*;
 import org.w3c.dom.Element;
@@ -30,9 +30,8 @@ public class ResourceIdNamingConventionDetector extends ResourceXmlDetector {
 
     // besides the listed below, there are further ignored elements (e.g. "style", "item"). we ignore them as
     // they use a completely different naming scheme
-    private static final List<String> ALLOWED_NAMED_ELEMENTS = Arrays.asList(SdkConstants.TAG_STRING_ARRAY,
-            SdkConstants.TAG_ARRAY, SdkConstants.TAG_PLURALS, SdkConstants.TAG_INTEGER_ARRAY,
-            SdkConstants.TAG_STRING, SdkConstants.TAG_COLOR, SdkConstants.TAG_DIMEN, "integer", "bool");
+    private static final List<String> ALLOWED_NAMED_ELEMENTS = Arrays.asList(TAG_STRING_ARRAY,
+            TAG_ARRAY, TAG_PLURALS, TAG_INTEGER_ARRAY, TAG_STRING, TAG_COLOR, TAG_DIMEN, "integer", "bool");
 
     private static final Pattern ALLOWED_NAMING_PATTERN = Pattern.compile("[a-z0-9_]*");
 
@@ -54,10 +53,10 @@ public class ResourceIdNamingConventionDetector extends ResourceXmlDetector {
         }
 
         // true for layout elements, menu items, ...
-        if (element.hasAttributeNS(SdkConstants.ANDROID_URI, SdkConstants.ATTR_ID)) {
-            String id = element.getAttributeNS(SdkConstants.ANDROID_URI, SdkConstants.ATTR_ID); // returns something like: @+id/string
+        if (element.hasAttributeNS(ANDROID_URI, ATTR_ID)) {
+            String id = element.getAttributeNS(ANDROID_URI, ATTR_ID); // returns something like: @+id/string
             if (id != null && !id.isEmpty()) {
-                if (id.startsWith(SdkConstants.ANDROID_ID_PREFIX)) { // ignore system special ids
+                if (id.startsWith(ANDROID_ID_PREFIX)) { // ignore system special ids
                     return;
                 }
 
@@ -68,8 +67,8 @@ public class ResourceIdNamingConventionDetector extends ResourceXmlDetector {
             }
         }
         // ... however, value files use "name" instead
-        else if (isValidValueElement(element) && element.hasAttribute(SdkConstants.ATTR_NAME)) {
-            String name = element.getAttribute(SdkConstants.ATTR_NAME);
+        else if (isValidValueElement(element) && element.hasAttribute(ATTR_NAME)) {
+            String name = element.getAttribute(ATTR_NAME);
 
             if (name != null && !name.isEmpty() && !isFollowingNamingConvention(name)) {
                 report(context, element, correctIdentifier(name));

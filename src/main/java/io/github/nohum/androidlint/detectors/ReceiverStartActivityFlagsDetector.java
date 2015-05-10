@@ -1,6 +1,6 @@
 package io.github.nohum.androidlint.detectors;
 
-import com.android.SdkConstants;
+import static com.android.SdkConstants.*;
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
 import com.android.tools.lint.client.api.JavaParser;
@@ -39,7 +39,7 @@ public class ReceiverStartActivityFlagsDetector extends Detector implements Dete
     @Nullable
     @Override
     public List<String> applicableSuperClasses() {
-        return Collections.singletonList(SdkConstants.CLASS_BROADCASTRECEIVER);
+        return Collections.singletonList(CLASS_BROADCASTRECEIVER);
     }
 
     @Override
