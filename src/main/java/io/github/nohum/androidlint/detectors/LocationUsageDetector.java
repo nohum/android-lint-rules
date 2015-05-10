@@ -22,7 +22,7 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
 
     public static final Issue ISSUE = Issue.create(
             "LocationUsageWithoutPermission",
-            "Location data is gathered without proper permission",
+            "Location data is gathered without declared manifest permission",
             "When requesting location data, the proper permission (`ACCESS_COARSE_LOCATION` or " +
             "`ACCESS_FINE_LOCATION`) must be requested in the manifest. Otherwise the " +
             "Android framework will throw a `SecurityException` when requesting location data." +
@@ -39,8 +39,11 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
     /** Permission name of fine location permission */
     public static final String FINE_LOCATION_PERMISSION = "android.permission.ACCESS_FINE_LOCATION";
 
+    private static final String CLASS_LOCATION_MANAGER = "android/location/LocationManager";
+
     private static final String LOCATION_METHOD_FINE = "gps";
     private static final String LOCATION_METHOD_COARSE = "network";
+    private static final String LOCATION_METHOD_PASSIVE = "passive";
 
     private static final String METHOD_ADD_GPS_LISTENER = "addGpsStatusListener";
     private static final String METHOD_ADD_NMEA_LISTENER = "addNmeaListener";
@@ -59,13 +62,6 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
     private boolean hasCoarsePermission = false;
 
     private boolean hasFinePermission = false;
-
-    @Override
-    public boolean appliesTo(@NonNull Context context, @NonNull File file) {
-        // applicable only for the XmlScanner
-        System.out.println(file.getName());
-        return true;//file.getName().equals(ANDROID_MANIFEST_XML);
-    }
 
     @Override
     public Collection<String> getApplicableElements() {
@@ -111,6 +107,10 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
             return; // should never happen
         }
 
+        if (!call.owner.equals(CLASS_LOCATION_MANAGER)) {
+            return;
+        }
+
         // used to print class byte code representations
         // easiest way to get that to work: include in project build.gradle classpath with: classpath 'org.ow2.asm:asm-debug-all:5.0.3'
         // classNode.accept(new TraceClassVisitor(new PrintWriter(System.out)));
@@ -143,10 +143,33 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
     private void handleRequestMethods(ClassContext context, MethodNode method, MethodInsnNode call) {
         // to make matters worse, there are many overloaded versions of the methods at hand
         // we only look at the string versions here.
+
+        // do a heuristic search for the expected location provider strings
+        AbstractInsnNode prev = call;
+        String usedLocationProvider = null;
+        while ((prev = LintUtils.getPrevInstruction(prev)) != null) {
+            if (prev instanceof LdcInsnNode && ((LdcInsnNode) prev).cst instanceof String) {
+                String tempData = (String) ((LdcInsnNode) prev).cst;
+
+                if (LOCATION_METHOD_FINE.equals(tempData) || LOCATION_METHOD_COARSE.equals(tempData)
+                        || LOCATION_METHOD_PASSIVE.equals(tempData)) {
+                    usedLocationProvider = tempData;
+                    break;
+                }
+            }
+        }
+
+        if (!hasFinePermission && LOCATION_METHOD_FINE.equals(usedLocationProvider)) {
+            reportDefault(context, method, call, FINE_LOCATION_PERMISSION);
+        } else if (!hasCoarsePermission && (LOCATION_METHOD_COARSE.equals(usedLocationProvider)
+                || LOCATION_METHOD_PASSIVE.equals(usedLocationProvider))) {
+            reportDefault(context, method, call, COARSE_LOCATION_PERMISSION);
+        }
     }
 
     private void handleProviderEnabled(ClassContext context, MethodNode method, MethodInsnNode call) {
         // previous to the INVOKEVIRTUAL call, there is an LDC call putting the provider on the stack, e.g.:
+        // HOWEVER, only if that value is not resolved using e.g. a separate method!!
         //  ALOAD 2
         //  LDC "gps"
         //  INVOKEVIRTUAL android/location/LocationManager.isProviderEnabled (Ljava/lang/String;)Z
@@ -168,6 +191,10 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
         }
 
         if (LOCATION_METHOD_COARSE.equals(provider) && !hasCoarsePermission) {
+            reportDefault(context, method, call, COARSE_LOCATION_PERMISSION);
+        }
+
+        if (LOCATION_METHOD_PASSIVE.equals(provider) && !hasCoarsePermission) {
             reportDefault(context, method, call, COARSE_LOCATION_PERMISSION);
         }
     }
