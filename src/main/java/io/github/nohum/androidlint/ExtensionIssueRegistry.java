@@ -6,10 +6,7 @@ import java.util.List;
 
 import com.android.tools.lint.client.api.IssueRegistry;
 import com.android.tools.lint.detector.api.Issue;
-import io.github.nohum.androidlint.detectors.LocationUsageDetector;
-import io.github.nohum.androidlint.detectors.ReceiverStartActivityFlagsDetector;
-import io.github.nohum.androidlint.detectors.ResourceIdNamingConventionDetector;
-import io.github.nohum.androidlint.detectors.SocketUsageDetector;
+import io.github.nohum.androidlint.detectors.*;
 
 /**
  * Entry point for this Android lint extension.
@@ -25,7 +22,8 @@ public class ExtensionIssueRegistry extends IssueRegistry {
         issues.add(ResourceIdNamingConventionDetector.ISSUE);
         issues.add(ReceiverStartActivityFlagsDetector.ISSUE);
         issues.add(LocationUsageDetector.ISSUE);
-        issues.add(SocketUsageDetector.ISSUE);
+        issues.add(SocketUsageDetectorAst.ISSUE);
+        issues.add(SocketUsageDetectorBytecode.ISSUE);
 
         return Collections.unmodifiableList(issues);
     }
