@@ -4,9 +4,13 @@ import com.android.annotations.NonNull;
 import com.android.tools.lint.detector.api.*;
 import com.google.common.collect.Sets;
 import lombok.ast.*;
+import lombok.ast.printer.SourceFormatter;
+import lombok.ast.printer.SourcePrinter;
+import lombok.ast.printer.StructureFormatter;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Element;
 
+import java.io.PrintWriter;
 import java.util.*;
 
 import static com.android.SdkConstants.*;
@@ -74,6 +78,7 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
     public List<Class<? extends Node>> getApplicableNodeTypes() {
         // our visitor looks for these nodes in the AST
         List<Class<? extends lombok.ast.Node>> types = new ArrayList<Class<? extends lombok.ast.Node>>();
+        types.add(CompilationUnit.class);
         types.add(ImportDeclaration.class);
         types.add(MethodDeclaration.class);
         types.add(ConstructorDeclaration.class);
@@ -99,8 +104,33 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
         }
 
         @Override
+        public boolean visitCompilationUnit(CompilationUnit node) {
+            boolean shouldContinue = false;
+
+
+            for (TypeDeclaration declaration : node.astTypeDeclarations()) {
+                if (declaration.astName().astValue().contains("AsyncHttpClientTask")) { // detect own classes preliminary
+                    shouldContinue = true;
+                    break;
+                }
+            }
+
+            if (!shouldContinue) {
+                return true;
+            }
+
+            SourceFormatter formatter = StructureFormatter.formatterWithPositions();
+            SourcePrinter printer = new SourcePrinter(formatter);
+
+            node.accept(printer);
+            new PrintWriter(System.out).write(formatter.finish());
+
+            return true;
+        }
+
+        @Override
         public boolean visitImportDeclaration(ImportDeclaration node) {
-            System.out.println("import: " + node.asFullyQualifiedName());
+//            System.out.println("import: " + node.asFullyQualifiedName());
 
             if (node.astStarImport()) {
 
@@ -129,12 +159,12 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
         public boolean visitMethodDeclaration(MethodDeclaration node) {
             localVars = null;
             currentMethod = node;
-            System.out.println(node.toString() + ": ");
+//            System.out.println(node.toString() + ": ");
 
             StrictListAccessor<VariableDefinition, lombok.ast.MethodDeclaration> parameters = node.astParameters();
             for (VariableDefinition def : parameters) {
 
-                def.astTypeReference().getTypeName();
+//                def.astTypeReference().getTypeName();
             }
 
             return super.visitMethodDeclaration(node);
@@ -144,7 +174,7 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
         public boolean visitConstructorDeclaration(ConstructorDeclaration node) {
             localVars = null;
             currentMethod = node;
-            System.out.println(node.toString() + " (ctr): " + node.astTypeName().astValue());
+//            System.out.println(node.toString() + " (ctr): " + node.astTypeName().astValue());
 
             return super.visitConstructorDeclaration(node);
         }
