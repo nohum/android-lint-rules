@@ -8,7 +8,6 @@ import org.objectweb.asm.tree.*;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Element;
 
-import java.io.File;
 import java.util.*;
 
 import static com.android.SdkConstants.*;
@@ -57,7 +56,7 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
     private static final int API_LEVEL_JELLY_BEAN_MR1 = 17;
     private static final int API_LEVEL_LOLLIPOP = 21;
 
-    private int minApiLevel = -1;
+    private int targetApiLevel = -1;
 
     private boolean hasCoarsePermission = false;
 
@@ -126,7 +125,7 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
             handleProximityMethods(context, method, call);
         }
         // ... also semantic change of when a exception is thrown
-        else if (METHOD_IS_PROVIDER_ENABLED.equals(calledMethod) && getMinSdk(context) < API_LEVEL_LOLLIPOP) {
+        else if (METHOD_IS_PROVIDER_ENABLED.equals(calledMethod) && getTargetSdk(context) < API_LEVEL_LOLLIPOP) {
             handleProviderEnabled(context, method, call);
         }
         // these calls depend on the used location provider
@@ -201,24 +200,24 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
 
     private void handleProximityMethods(ClassContext context, MethodNode method, MethodInsnNode call) {
         // starting with level 17, fine location is required
-        if (getMinSdk(context) >= API_LEVEL_JELLY_BEAN_MR1 && !hasFinePermission) {
+        if (getTargetSdk(context) >= API_LEVEL_JELLY_BEAN_MR1 && !hasFinePermission) {
             context.report(ISSUE, method, call, context.getLocation(call),
                     String.format("Call to `%s` requires `%s` (starting with api 17)", call.name,
                             FINE_LOCATION_PERMISSION));
         }
 
-        if (getMinSdk(context) < API_LEVEL_JELLY_BEAN_MR1 && !hasFinePermission
+        if (getTargetSdk(context) < API_LEVEL_JELLY_BEAN_MR1 && !hasFinePermission
                 && !hasCoarsePermission) { // TODO: test if fine permission-check can be omitted
             reportDefault(context, method, call, COARSE_LOCATION_PERMISSION);
         }
     }
 
-    protected int getMinSdk(Context context) {
-        if (minApiLevel == -1) {
-            AndroidVersion minSdkVersion = context.getMainProject().getMinSdkVersion();
-            minApiLevel = minSdkVersion.getFeatureLevel();
+    protected int getTargetSdk(Context context) {
+        if (targetApiLevel == -1) {
+            AndroidVersion targetSdkVersion = context.getMainProject().getTargetSdkVersion();
+            targetApiLevel = targetSdkVersion.getFeatureLevel();
         }
 
-        return minApiLevel;
+        return targetApiLevel;
     }
 }
