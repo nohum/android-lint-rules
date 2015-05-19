@@ -86,8 +86,8 @@ public class SocketUsageDetectorBytecode extends Detector implements Detector.Xm
             return;
         }
 
-        // we only accept instance calls
-        if (call.getOpcode() != Opcodes.INVOKEVIRTUAL) {
+        // we only accept instance calls (also HttpClient is a interface)
+        if (call.getOpcode() != Opcodes.INVOKEVIRTUAL && call.getOpcode() != Opcodes.INVOKEINTERFACE) {
             return;
         }
 
