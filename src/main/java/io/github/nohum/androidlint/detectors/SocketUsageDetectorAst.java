@@ -89,7 +89,7 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
     }
 
     private class DeclarationVisitor extends ForwardingAstVisitor {
-        private static final boolean DEBUG = true;
+        private static final boolean DEBUG = false;
         private JavaContext context;
         private Map<String, String> currentSuspectedVars = new HashMap<>();
         private Node currentMethod;
