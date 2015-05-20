@@ -17,10 +17,10 @@ import static com.android.SdkConstants.*;
  * the proper permissions. The Android manifest is scanned for the permissions. Hence, usages
  * of the APIs with correct permissions will not trigger any warnings.
  */
-public class LocationUsageDetector extends Detector implements Detector.XmlScanner, Detector.ClassScanner {
+public class LocationUsageDetectorBytecode extends Detector implements Detector.XmlScanner, Detector.ClassScanner {
 
     public static final Issue ISSUE = Issue.create(
-            "LocationUsageWithoutPermission",
+            "LocationUsageWithoutPermissionBytecode",
             "Location data is gathered without declared manifest permission",
             "When requesting location data, the proper permission (`ACCESS_COARSE_LOCATION` or " +
             "`ACCESS_FINE_LOCATION`) must be requested in the manifest. Otherwise the " +
@@ -30,7 +30,7 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
             Category.CORRECTNESS,
             8,
             Severity.ERROR,
-            new Implementation(LocationUsageDetector.class, EnumSet.of(Scope.MANIFEST, Scope.CLASS_FILE)));
+            new Implementation(LocationUsageDetectorBytecode.class, EnumSet.of(Scope.MANIFEST, Scope.CLASS_FILE)));
 
     /** Permission name of coarse location permission */
     public static final String COARSE_LOCATION_PERMISSION = "android.permission.ACCESS_COARSE_LOCATION";
@@ -103,7 +103,7 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
     public void checkCall(@NonNull ClassContext context, @NonNull ClassNode classNode, @NonNull MethodNode method,
                           @NonNull MethodInsnNode call) {
         if (call.getOpcode() != Opcodes.INVOKEVIRTUAL) {
-            return; // should never happen
+            return;
         }
 
         if (!call.owner.equals(CLASS_LOCATION_MANAGER)) {
@@ -202,12 +202,11 @@ public class LocationUsageDetector extends Detector implements Detector.XmlScann
         // starting with level 17, fine location is required
         if (getTargetSdk(context) >= API_LEVEL_JELLY_BEAN_MR1 && !hasFinePermission) {
             context.report(ISSUE, method, call, context.getLocation(call),
-                    String.format("Call to `%s` requires `%s` (starting with api 17)", call.name,
-                            FINE_LOCATION_PERMISSION));
+                    String.format("Call to `%s` requires `%s` (starting with api %d)", call.name,
+                            FINE_LOCATION_PERMISSION, API_LEVEL_JELLY_BEAN_MR1));
         }
 
-        if (getTargetSdk(context) < API_LEVEL_JELLY_BEAN_MR1 && !hasFinePermission
-                && !hasCoarsePermission) { // TODO: test if fine permission-check can be omitted
+        if (getTargetSdk(context) < API_LEVEL_JELLY_BEAN_MR1 && !hasFinePermission && !hasCoarsePermission) {
             reportDefault(context, method, call, COARSE_LOCATION_PERMISSION);
         }
     }
