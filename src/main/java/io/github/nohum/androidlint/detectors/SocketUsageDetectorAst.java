@@ -265,8 +265,11 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
             if (callWillFail(varName, calledMethodName, hasParameters)) {
                 log("found failing: %s.%s", varName, calledMethodName);
 
-                context.report(ISSUE, context.getLocation(currentInvocatedMethod),
-                        String.format("Call to `%s` requires INTERNET permission", currentInvocatedMethod));
+                // do not show if the user added a comment in the form of: // noinspection SocketUsageWithoutPermissionAst
+                if (!context.isSuppressedWithComment(currentInvocatedMethod, ISSUE)) {
+                    context.report(ISSUE, context.getLocation(currentInvocatedMethod),
+                            String.format("Call to `%s` requires INTERNET permission", currentInvocatedMethod));
+                }
             }
 
             // we are making a trade-off here: by setting the invocation to null, e.g. inline-expressions with multiple
