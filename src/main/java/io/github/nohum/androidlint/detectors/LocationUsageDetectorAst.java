@@ -123,8 +123,6 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
             log("visitMethod: discarding call to %s.%s", resolvedMethod.getContainingClass().getName(), calledMethod);
             return;
         }
-        log("visitMethod: found call to %s.%s", resolvedMethod.getContainingClass().getName(), calledMethod);
-
 
         // some calls always require fine permission
         if (!hasFinePermission && METHOD_ADD_GPS_LISTENER.equals(calledMethod) || METHOD_ADD_NMEA_LISTENER.equals(calledMethod)) {
@@ -197,9 +195,11 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
             return;
         }
 
-        StringDataFlowAstVisitor visitor = new StringDataFlowAstVisitor(context);
+        StringDataFlowDetector visitor = new StringDataFlowDetector(context);
         visitor.startInspectionOnNode(argumentList.first());
         List<String> providers = visitor.getResults();
+
+        log("handleProviderEnabled: call %s\n  -> yielded result: %s", method, Arrays.toString(providers.toArray()));
 
         /*
            we may get multiple results back, e.g. for calls like:
