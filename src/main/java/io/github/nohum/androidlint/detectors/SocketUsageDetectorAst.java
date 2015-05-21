@@ -92,7 +92,6 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
         private static final boolean DEBUG = false;
         private JavaContext context;
         private Map<String, String> currentSuspectedVars = new HashMap<>();
-        private Node currentMethod;
         private Set<String> imports = new HashSet<String>();
         private MethodInvocation currentInvocatedMethod;
 
@@ -173,7 +172,6 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
             }
 
             currentSuspectedVars.clear();
-            currentMethod = node;
 
             log("in method: %s", node.astMethodName().astValue());
             return super.visitMethodDeclaration(node);
@@ -189,8 +187,6 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
             }
 
             currentSuspectedVars.clear();
-            currentMethod = node;
-
             return super.visitConstructorDeclaration(node);
         }
 
@@ -308,18 +304,6 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
                 default:
                     return false;
             }
-        }
-
-        /**
-         * Called as a fifth and last step
-         */
-        @Override
-        public void endVisit(Node node) {
-            if (node == currentMethod) {
-                currentMethod = null;
-            }
-
-            super.endVisit(node);
         }
     }
 }
