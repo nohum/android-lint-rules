@@ -77,7 +77,7 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
     @Override
     public List<Class<? extends Node>> getApplicableNodeTypes() {
         // our visitor looks for these nodes in the AST
-        List<Class<? extends lombok.ast.Node>> types = new ArrayList<Class<? extends lombok.ast.Node>>();
+        List<Class<? extends Node>> types = new ArrayList<Class<? extends Node>>();
         types.add(ImportDeclaration.class);
         types.add(MethodDeclaration.class);
         types.add(ConstructorDeclaration.class);
@@ -247,6 +247,9 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
             return false;
         }
 
+        /**
+         * Fifth step (method invocations usually contain a variable reference)
+         */
         @Override
         public boolean visitVariableReference(VariableReference node) {
             if (currentInvocatedMethod == null) {
