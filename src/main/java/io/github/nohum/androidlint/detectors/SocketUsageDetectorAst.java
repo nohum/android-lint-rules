@@ -269,7 +269,8 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
             }
 
             // we are making a trade-off here: by setting the invocation to null, e.g. inline-expressions with multiple
-            // variable references. but this is ok as we are finally interested in the method call, not the variables
+            // variable references are only detected once. but this is ok as we are finally interested in the method
+            // call, not the variables
             currentInvocatedMethod = null;
             return super.visitVariableReference(node);
         }
