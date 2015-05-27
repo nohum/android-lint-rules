@@ -27,7 +27,7 @@ public class SocketUsageDetectorBytecode extends Detector implements Detector.Xm
 
     public static final Issue ISSUE = Issue.create(
             "SocketUsageWithoutPermissionBytecode",
-            "Internet is accesses without proper permission",
+            "Internet is accessed without proper permission",
             "When accessing the internet using a socket or some other available methods, " +
             "the `android.permission.INTERNET` permission must be acquired in the manifest.",
             Category.CORRECTNESS,

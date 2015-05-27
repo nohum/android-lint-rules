@@ -19,7 +19,7 @@ public class SocketUsageDetectorAst extends Detector implements Detector.XmlScan
 
     public static final Issue ISSUE = Issue.create(
             "SocketUsageWithoutPermissionAst",
-            "Internet is accesses without proper permission",
+            "Internet is accessed without proper permission",
             "When accessing the internet using a socket or some other available methods, " +
             "the `android.permission.INTERNET` permission must be acquired in the manifest.",
             Category.CORRECTNESS,

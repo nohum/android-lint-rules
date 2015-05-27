@@ -21,8 +21,8 @@ public class ExtensionIssueRegistry extends IssueRegistry {
         List<Issue> issues = new ArrayList<Issue>();
         issues.add(ResourceIdNamingConventionDetector.ISSUE);
         issues.add(ReceiverStartActivityFlagsDetector.ISSUE);
-        issues.add(LocationUsageDetectorAst.ISSUE);
-        issues.add(LocationUsageDetectorBytecode.ISSUE);
+//        issues.add(LocationUsageDetectorAst.ISSUE);
+//        issues.add(LocationUsageDetectorBytecode.ISSUE);
         issues.add(SocketUsageDetectorAst.ISSUE);
         issues.add(SocketUsageDetectorBytecode.ISSUE);
 
