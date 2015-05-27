@@ -131,11 +131,9 @@ public class SocketUsageDetectorBytecode extends Detector implements Detector.Xm
     }
 
     private String getApplicableInheritance(String originalOwner, LintDriver driver) {
-        String superClass = null;
-        String prevSuper;
+        String superClass = originalOwner;
         do {
-            prevSuper = superClass; // needed as abstract classes are their own super classes
-            superClass = driver.getSuperClass(originalOwner);
+            superClass = driver.getSuperClass(superClass);
 
             if (CLASS_SOCKET.equals(superClass)) {
                 return CLASS_SOCKET;
@@ -144,7 +142,7 @@ public class SocketUsageDetectorBytecode extends Detector implements Detector.Xm
             } else if (CLASS_DEFAULT_HTTP_CLIENT.equals(superClass)) {
                 return CLASS_DEFAULT_HTTP_CLIENT;
             }
-        } while (superClass != null && !superClass.equals(prevSuper));
+        } while (superClass != null);
 
         // no need to check URL as it is declared final
         // also no need for HttpClient as not invoked in case of INVOKEVIRTUAL (would use INVOKEINTERFACE instead)
