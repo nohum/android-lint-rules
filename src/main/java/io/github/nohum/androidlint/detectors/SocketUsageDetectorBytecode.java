@@ -1,6 +1,7 @@
 package io.github.nohum.androidlint.detectors;
 
 import com.android.annotations.NonNull;
+import com.android.tools.lint.client.api.LintDriver;
 import com.android.tools.lint.detector.api.*;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
@@ -33,7 +34,8 @@ public class SocketUsageDetectorBytecode extends Detector implements Detector.Xm
             Category.CORRECTNESS,
             8,
             Severity.ERROR,
-            new Implementation(SocketUsageDetectorBytecode.class, EnumSet.of(Scope.MANIFEST, Scope.CLASS_FILE)));
+            new Implementation(SocketUsageDetectorBytecode.class, EnumSet.of(Scope.MANIFEST, Scope.CLASS_FILE,
+                    Scope.JAVA_LIBRARIES)));
 
     /** Permission name of INTERNET permission */
     private static final String INTERNET_PERMISSION = "android.permission.INTERNET";
@@ -91,22 +93,24 @@ public class SocketUsageDetectorBytecode extends Detector implements Detector.Xm
             return;
         }
 
-        if (matches(call)) {
+        if (matches(call, call.getOpcode() == Opcodes.INVOKEVIRTUAL, context.getDriver())) {
             context.report(ISSUE, method, call, context.getLocation(call),
                     String.format("Call to `%s` requires INTERNET permission", call.name));
         }
     }
 
-    private boolean matches(MethodInsnNode call) {
-        // only these certain combinations are allowed (although opening the door for many false negatives
-        // as third-party libraries are not considered)
+    private boolean matches(MethodInsnNode call, boolean checkInheritance, LintDriver driver) {
+        String owner = call.owner;
+        if (checkInheritance) {
+            owner = getApplicableInheritance(owner, driver);
+        }
 
-        if (METHOD_SOCKET_CONNECT.equals(call.name) && CLASS_SOCKET.equals(call.owner)) {
+        if (METHOD_SOCKET_CONNECT.equals(call.name) && CLASS_SOCKET.equals(owner)) {
             return true;
         }
 
         if (METHOD_SOCKET_FACTORY_CREATE.equals(call.name)
-                && (CLASS_SOCKET_FACTORY.equals(call.owner) || CLASS_SSL_SOCKET_FACTORY.equals(call.owner))) {
+                && (CLASS_SOCKET_FACTORY.equals(owner) || CLASS_SSL_SOCKET_FACTORY.equals(owner))) {
             // the createSocket-method has many overloaded variants - we are only interested in the ones that
             // take parameters as these are creating an already connected socket - (the simple one would be
             // a false positive)
@@ -115,14 +119,35 @@ public class SocketUsageDetectorBytecode extends Detector implements Detector.Xm
         }
 
         if (METHOD_HTTP_CLIENT_EXECUTE.equals(call.name)
-                && (CLASS_HTTP_CLIENT.equals(call.owner) || CLASS_DEFAULT_HTTP_CLIENT.equals(call.owner))) {
+                && (CLASS_HTTP_CLIENT.equals(owner) || CLASS_DEFAULT_HTTP_CLIENT.equals(owner))) {
             return true;
         }
 
-        if (METHOD_URL_OPEN_CONNECTION.equals(call.name) && CLASS_URL.equals(call.owner)) {
+        if (METHOD_URL_OPEN_CONNECTION.equals(call.name) && CLASS_URL.equals(owner)) {
             return true;
         }
 
         return false;
+    }
+
+    private String getApplicableInheritance(String originalOwner, LintDriver driver) {
+        String superClass = null;
+        String prevSuper;
+        do {
+            prevSuper = superClass; // needed as abstract classes are their own super classes
+            superClass = driver.getSuperClass(originalOwner);
+
+            if (CLASS_SOCKET.equals(superClass)) {
+                return CLASS_SOCKET;
+            } else if (CLASS_SOCKET_FACTORY.equals(superClass)) { // SSL version extends this
+                return CLASS_SOCKET_FACTORY;
+            } else if (CLASS_DEFAULT_HTTP_CLIENT.equals(superClass)) {
+                return CLASS_DEFAULT_HTTP_CLIENT;
+            }
+        } while (superClass != null && !superClass.equals(prevSuper));
+
+        // no need to check URL as it is declared final
+        // also no need for HttpClient as not invoked in case of INVOKEVIRTUAL (would use INVOKEINTERFACE instead)
+        return originalOwner;
     }
 }
