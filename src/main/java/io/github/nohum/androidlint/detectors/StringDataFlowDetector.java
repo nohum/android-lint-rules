@@ -50,7 +50,6 @@ public class StringDataFlowDetector {
         log("found literals: %s", Arrays.toString(firstPass.stringLiterals.toArray()));
         log("found selects: %s", Arrays.toString(firstPass.selects.toArray()));
         log("found variables: %s", Arrays.toString(firstPass.variableReferences.toArray()));
-        log("found method invocations: %s", Arrays.toString(firstPass.methodInvocations.toArray()));
 
         for (StringLiteral literal : firstPass.stringLiterals) {
             addResult(literal.astValue());
@@ -136,12 +135,10 @@ public class StringDataFlowDetector {
 
         private List<StringLiteral> stringLiterals = new ArrayList<>();
         private List<VariableReference> variableReferences = new ArrayList<>();
-        private List<MethodInvocation> methodInvocations = new ArrayList<>();
         private List<Select> selects = new ArrayList<>();
 
         public boolean foundSomething() {
-            return !(stringLiterals.isEmpty() && variableReferences.isEmpty() && methodInvocations.isEmpty()
-                    && selects.isEmpty());
+            return !(stringLiterals.isEmpty() && variableReferences.isEmpty() && selects.isEmpty());
         }
 
         @Override
@@ -154,12 +151,6 @@ public class StringDataFlowDetector {
         public boolean visitVariableReference(VariableReference node) {
             variableReferences.add(node);
             return super.visitVariableReference(node);
-        }
-
-        @Override
-        public boolean visitMethodInvocation(MethodInvocation node) {
-            methodInvocations.add(node);
-            return super.visitMethodInvocation(node);
         }
 
         @Override
@@ -362,7 +353,7 @@ public class StringDataFlowDetector {
             log("    VariableValueVisitor.visitSelect: %s", node);
             addToResult(node);
 
-            // DO NOT CHANGE as LocationManager.GPS_PROVIDER would add a false VariableReference
+            // DO NOT CHANGE as e.g. "LocationManager.GPS_PROVIDER" would add a false VariableReference
             // to LocationManager otherwise instead
             return true;
         }
