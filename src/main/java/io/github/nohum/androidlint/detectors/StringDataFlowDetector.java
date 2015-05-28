@@ -47,10 +47,10 @@ public class StringDataFlowDetector {
             return;
         }
 
-        log("  found literals: %s", Arrays.toString(firstPass.stringLiterals.toArray()));
-        log("  found selects: %s", Arrays.toString(firstPass.selects.toArray()));
-        log("  found variables: %s", Arrays.toString(firstPass.variableReferences.toArray()));
-        log("  found method invocations: %s", Arrays.toString(firstPass.methodInvocations.toArray()));
+        log("found literals: %s", Arrays.toString(firstPass.stringLiterals.toArray()));
+        log("found selects: %s", Arrays.toString(firstPass.selects.toArray()));
+        log("found variables: %s", Arrays.toString(firstPass.variableReferences.toArray()));
+        log("found method invocations: %s", Arrays.toString(firstPass.methodInvocations.toArray()));
 
         for (StringLiteral literal : firstPass.stringLiterals) {
             addResult(literal.astValue());
@@ -63,6 +63,8 @@ public class StringDataFlowDetector {
         }
 
         handleVariableReferences(firstPass.variableReferences);
+
+        // TODO method invocations?
     }
 
     public List<String> getResults() {
@@ -72,16 +74,19 @@ public class StringDataFlowDetector {
     private void handleVariableReferences(List<VariableReference> variableReferences) {
         for (VariableReference variableReference : variableReferences) {
             if (!isStringReference(variableReference)) {
-                log("handleVariableReferences: discarding %s (not a string)", variableReference.astIdentifier());
+//                log("handleVariableReferences: discarding %s (not a string)", variableReference.astIdentifier());
                 continue;
             }
 
             VariableValueVisitor variableVisitor = new VariableValueVisitor();
             variableVisitor.findValuesForVariableReference(variableReference);
 
-            for (String result : variableVisitor.retrieveResults()) {
-                addResult(result);
-            }
+            log("  handleVariableReferences: result for %s: %s", variableReference.astIdentifier(),
+                    Arrays.toString(variableVisitor.retrieveResults().toArray()));
+
+//            for (String result : variableVisitor.retrieveResults()) {
+//                addResult(result);
+//            }
         }
     }
 
@@ -106,20 +111,16 @@ public class StringDataFlowDetector {
             StringLiteral argument = (StringLiteral) expression;
             String parameter = argument.astValue();
 
-            log("handleSimpleFieldDereferences: string literal found: %s", parameter);
             addResult(parameter);
-
             return true;
         }
 
         JavaParser.ResolvedNode resolvedNode = context.resolve(expression);
         // resolving nodes may also fail completely, e.g. for inline if expressions
-        log("handleSimpleFieldDereferences: resolved expression to: %s", resolvedNode);
-
         if (resolvedNode instanceof JavaParser.ResolvedField) {
             JavaParser.ResolvedField field = (JavaParser.ResolvedField) resolvedNode;
             Object value = field.getValue();
-            log("handleSimpleFieldDereferences: resolved field to value: %s", value);
+            log("  handleSimpleFieldDereferences: resolved field %s to value: %s", resolvedNode, value);
 
             if (value instanceof String) {
                 addResult((String) value);
@@ -170,7 +171,15 @@ public class StringDataFlowDetector {
 
     private class VariableValueVisitor extends ForwardingAstVisitor {
 
-        private List<String> results;
+        private List<Expression> results = new ArrayList<>();
+
+        private List<Expression> conditionalResults = new ArrayList<>();
+
+        private VariableReference subject;
+
+        private boolean collectionAllowed = false;
+
+        private int conditionalStage = 0;
 
         public void findValuesForVariableReference(VariableReference variable) {
             Node surroundingMethod = JavaContext.findSurroundingMethod(variable);
@@ -180,16 +189,182 @@ public class StringDataFlowDetector {
                 return;
             }
 
+            Block methodBody = null;
+            if (surroundingMethod instanceof MethodDeclaration) {
+                methodBody = ((MethodDeclaration) surroundingMethod).astBody();
+
+                log("    findSurroundingMethod: variable ref = %s, surrounded by = %s", variable,
+                        ((MethodDeclaration) surroundingMethod).astMethodName());
+            } else if (surroundingMethod instanceof ConstructorDeclaration) {
+                methodBody = ((ConstructorDeclaration) surroundingMethod).astBody();
+
+                log("    findSurroundingMethod: variable ref = %s, surrounded by = %s.<init>", variable,
+                        ((ConstructorDeclaration) surroundingMethod).astTypeName());
+            }
+
+            if (methodBody == null) {
+                throw new IllegalStateException("method body was empty");
+            }
+
+            subject = variable;
+
             // look for variable definition entry and variable writes
             // pay attention to conditionals
+            methodBody.accept(this);
 
-            // later: recurse if variable is written by method
+            // later: recurse if variable is written by method signature
             // stop at boundary of compilation unit
         }
 
-        public List<String> retrieveResults() {
-            return results;
+        public List<Expression> retrieveResults() {
+            List<Expression> result = new ArrayList<Expression>(results);
+            result.addAll(conditionalResults);
+            return result;
         }
 
+        private boolean isAcceptableResult(Expression expression) {
+            return expression instanceof Select || expression instanceof StringLiteral
+                    || expression instanceof MethodInvocation;
+        }
+
+        private void addToResult(Expression node) {
+            if (conditionalStage > 0) {
+                conditionalResults.add(node);
+            } else {
+                results.clear();
+                results.add(node);
+            }
+        }
+
+        @Override
+        public boolean visitVariableDefinitionEntry(VariableDefinitionEntry node) {
+            if (!node.astName().astValue().equals(subject.astIdentifier().astValue())) {
+                return true;
+            }
+
+            if (isAcceptableResult(node.astInitializer())) {
+                log("    VariableValueVisitor.visitVariableDefinitionEntry: adding %s", node);
+                results.add(node.astInitializer());
+                return true;
+            }
+
+            collectionAllowed = true;
+            return false;
+        }
+
+        @Override
+        public void endVisit(Node node) {
+            if (node instanceof VariableDefinitionEntry || node instanceof BinaryExpression) {
+                log("    endVisit: expression");
+                collectionAllowed = false;
+            } else if (node instanceof InlineIfExpression || node instanceof If) {
+                log("    endVisit: if");
+                -- conditionalStage;
+            }
+        }
+
+        @Override
+        public boolean visitBinaryExpression(BinaryExpression node) {
+            log("    VariableValueVisitor.visitBinaryExpression: %s", node);
+
+            if (!(node.astLeft() instanceof VariableReference)) {
+                return true;
+            }
+
+            VariableReference reference = ((VariableReference) node.astLeft());
+            String assignmentVarName = reference.astIdentifier().astValue();
+            if (!assignmentVarName.equals(subject.astIdentifier().astValue())) {
+                return true;
+            }
+
+            if (!node.astOperator().isAssignment()) {
+                log("    VariableValueVisitor.visitBinaryExpression: not an assignment (type = %s)", node.astOperator());
+                return true; // we are only interested in assignments
+            }
+
+            collectionAllowed = true;
+            return false; // inspect statement further
+        }
+
+        @Override
+        public boolean visitInlineIfExpression(InlineIfExpression node) {
+            log("    VariableValueVisitor.visitInlineIfExpression: %s", node);
+
+            ++ conditionalStage;
+            return false;
+        }
+
+        @Override
+        public boolean visitIf(If node) {
+            log("    VariableValueVisitor.visitIf: if (%s)", node.astCondition());
+
+            ++ conditionalStage;
+            return super.visitIf(node);
+        }
+
+        @Override
+        public boolean visitExpressionStatement(ExpressionStatement node) {
+            log("    VariableValueVisitor.visitExpressionStatement (if): %s", node);
+            if (conditionalStage == 0) {
+                return false; // do not return true as blocks that yet have to be discovered should still be included
+            }
+
+            return super.visitExpressionStatement(node);
+        }
+
+        @Override
+        public boolean visitStringLiteral(StringLiteral node) {
+            if (!collectionAllowed) {
+                log("    VariableValueVisitor.visitStringLiteral (%s): collection not allowed", node);
+                return true;
+            }
+
+            log("    VariableValueVisitor.visitStringLiteral: %s", node);
+            addToResult(node);
+            return true;
+        }
+
+        @Override
+        public boolean visitVariableReference(VariableReference node) {
+            if (!collectionAllowed) {
+                log("    VariableValueVisitor.visitVariableReference (%s): collection not allowed", node.astIdentifier());
+                return true;
+            }
+
+            if (node.astIdentifier().astValue().equals(subject.astIdentifier().astValue())) {
+                return true; // this a assignment to the subject variable
+            }
+
+            log("    VariableValueVisitor.visitVariableReference: %s", node);
+            addToResult(node);
+            return super.visitVariableReference(node);
+        }
+
+        @Override
+        public boolean visitMethodInvocation(MethodInvocation node) {
+            if (!collectionAllowed) {
+                log("    VariableValueVisitor.visitMethodInvocation (%s): collection not allowed", node.astName());
+                return true;
+            }
+
+            log("    VariableValueVisitor.visitMethodInvocation: %s", node);
+            addToResult(node);
+            return super.visitMethodInvocation(node);
+        }
+
+        @Override
+        public boolean visitSelect(Select node) {
+            if (!collectionAllowed) {
+                log("    VariableValueVisitor.visitSelect (%s): collection not allowed", node);
+                return true;
+            }
+
+            log("    VariableValueVisitor.visitSelect: %s", node);
+            addToResult(node);
+
+            // DO NOT CHANGE as LocationManager.GPS_PROVIDER would add a false VariableReference
+            // to LocationManager otherwise instead
+            return true;
+        }
     }
 }
