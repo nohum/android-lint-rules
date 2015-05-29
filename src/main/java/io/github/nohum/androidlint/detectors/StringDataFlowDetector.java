@@ -40,7 +40,7 @@ public class StringDataFlowDetector {
 
         // first pass: find everything that is interesting for data-flow analysis
         FirstInspectionVisitor firstPass = new FirstInspectionVisitor();
-        start.accept(firstPass);
+        firstPass.process(start);
 
         if (!firstPass.foundSomething()) {
             log("startInspectionOnExpression: nothing found anything in first pass");
@@ -80,7 +80,7 @@ public class StringDataFlowDetector {
 
             VariableValueVisitor variableVisitor = new VariableValueVisitor();
             // if something is found, this visitor calls a new instance of itself on endVisit
-            variableVisitor.findValuesForVariableReference(variableReference);
+            variableVisitor.findValuesFor(variableReference);
         }
     }
 
@@ -88,7 +88,7 @@ public class StringDataFlowDetector {
     private void handleMethodInvocations(List<MethodInvocation> methodInvocations) {
         for (MethodInvocation invocation : methodInvocations) {
             MethodValueVisitor methodVisitor = new MethodValueVisitor();
-            methodVisitor.findValuesForMethodInvocation(invocation);
+            methodVisitor.findValuesFor(invocation);
         }
     }
 
@@ -142,6 +142,10 @@ public class StringDataFlowDetector {
         private List<MethodInvocation> methodInvocations = new ArrayList<>();
         private List<Select> selects = new ArrayList<>();
 
+        public void process(Expression start) {
+            start.accept(this);
+        }
+
         public boolean foundSomething() {
             return !(stringLiterals.isEmpty() && variableReferences.isEmpty() && methodInvocations.isEmpty()
                     && selects.isEmpty());
@@ -168,7 +172,7 @@ public class StringDataFlowDetector {
         @Override
         public boolean visitSelect(Select node) {
             selects.add(node);
-            return super.visitSelect(node);
+            return true;
         }
     }
 
@@ -201,7 +205,7 @@ public class StringDataFlowDetector {
                     handleSimpleFieldDereferences(result);
                 } else if (result instanceof VariableReference) {
                     VariableValueVisitor variableVisitor = new VariableValueVisitor();
-                    variableVisitor.findValuesForVariableReference((VariableReference) result);
+                    variableVisitor.findValuesFor((VariableReference) result);
                 } else if (result instanceof MethodInvocation) {
                     MethodInvocation invocation = (MethodInvocation) result;
 
@@ -213,7 +217,7 @@ public class StringDataFlowDetector {
                     }
 
                     MethodValueVisitor methodVisitor = new MethodValueVisitor();
-                    methodVisitor.findValuesForMethodInvocation(invocation);
+                    methodVisitor.findValuesFor(invocation);
                 }
             }
         }
@@ -246,7 +250,7 @@ public class StringDataFlowDetector {
 
         private Block visitationBoundary;
 
-        public void findValuesForVariableReference(VariableReference variable) {
+        public void findValuesFor(VariableReference variable) {
             Node surroundingMethod = JavaContext.findSurroundingMethod(variable);
             if (surroundingMethod == null) {
                 // should not be possible. additionally, field references have already been
@@ -395,7 +399,7 @@ public class StringDataFlowDetector {
 
         private MethodDeclaration visitationBoundary;
 
-        public void findValuesForMethodInvocation(MethodInvocation method) {
+        public void findValuesFor(MethodInvocation method) {
             subject = method;
 
             compilationUnit = (CompilationUnit) context.getCompilationUnit();
@@ -468,7 +472,7 @@ public class StringDataFlowDetector {
             log("      MethodValueVisitor.visitMethodInvocation: %s", node);
 
             MethodValueVisitor methodVisitor = new MethodValueVisitor();
-            methodVisitor.findValuesForMethodInvocation(node);
+            methodVisitor.findValuesFor(node);
 
             return true;
         }
@@ -483,7 +487,7 @@ public class StringDataFlowDetector {
 
             // inspect further using VariableValueVisitor
             VariableValueVisitor valueVisitor = new VariableValueVisitor();
-            valueVisitor.findValuesForVariableReference(node);
+            valueVisitor.findValuesFor(node);
 
             return true;
         }
