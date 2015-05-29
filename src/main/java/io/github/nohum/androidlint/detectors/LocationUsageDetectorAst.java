@@ -32,7 +32,7 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
             Severity.ERROR,
             new Implementation(LocationUsageDetectorAst.class, EnumSet.of(Scope.MANIFEST, Scope.JAVA_FILE)));
 
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = true;
 
     /** Permission name of coarse location permission */
     public static final String COARSE_LOCATION_PERMISSION = "android.permission.ACCESS_COARSE_LOCATION";

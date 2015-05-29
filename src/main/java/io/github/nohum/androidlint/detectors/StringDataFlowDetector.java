@@ -50,6 +50,7 @@ public class StringDataFlowDetector {
         log("found literals: %s", Arrays.toString(firstPass.stringLiterals.toArray()));
         log("found selects: %s", Arrays.toString(firstPass.selects.toArray()));
         log("found variables: %s", Arrays.toString(firstPass.variableReferences.toArray()));
+        log("found method invocations: %s", Arrays.toString(firstPass.methodInvocations.toArray()));
 
         for (StringLiteral literal : firstPass.stringLiterals) {
             addResult(literal.astValue());
@@ -63,7 +64,7 @@ public class StringDataFlowDetector {
 
         handleVariableReferences(firstPass.variableReferences);
 
-        // TODO method invocations?
+        handleMethodInvocations(firstPass.methodInvocations);
     }
 
     public List<String> getResults() {
@@ -78,16 +79,19 @@ public class StringDataFlowDetector {
             }
 
             VariableValueVisitor variableVisitor = new VariableValueVisitor();
+            // if something is found, this visitor calls a new instance of itself on endVisit
             variableVisitor.findValuesForVariableReference(variableReference);
-
-            log("  handleVariableReferences: result for %s: %s", variableReference.astIdentifier(),
-                    Arrays.toString(variableVisitor.retrieveResults().toArray()));
-
-//            for (String result : variableVisitor.retrieveResults()) {
-//                addResult(result);
-//            }
         }
     }
+
+
+    private void handleMethodInvocations(List<MethodInvocation> methodInvocations) {
+        for (MethodInvocation invocation : methodInvocations) {
+            MethodValueVisitor methodVisitor = new MethodValueVisitor();
+            methodVisitor.findValuesForMethodInvocation(invocation);
+        }
+    }
+
 
     private boolean isStringReference(VariableReference variableReference) {
         JavaParser.ResolvedNode resolvedNode = context.resolve(variableReference);
@@ -135,10 +139,12 @@ public class StringDataFlowDetector {
 
         private List<StringLiteral> stringLiterals = new ArrayList<>();
         private List<VariableReference> variableReferences = new ArrayList<>();
+        private List<MethodInvocation> methodInvocations = new ArrayList<>();
         private List<Select> selects = new ArrayList<>();
 
         public boolean foundSomething() {
-            return !(stringLiterals.isEmpty() && variableReferences.isEmpty() && selects.isEmpty());
+            return !(stringLiterals.isEmpty() && variableReferences.isEmpty() && methodInvocations.isEmpty()
+                    && selects.isEmpty());
         }
 
         @Override
@@ -154,23 +160,91 @@ public class StringDataFlowDetector {
         }
 
         @Override
+        public boolean visitMethodInvocation(MethodInvocation node) {
+            methodInvocations.add(node);
+            return super.visitMethodInvocation(node);
+        }
+
+        @Override
         public boolean visitSelect(Select node) {
             selects.add(node);
             return super.visitSelect(node);
         }
     }
 
-    private class VariableValueVisitor extends ForwardingAstVisitor {
+    private class StagedResultVisitor extends ForwardingAstVisitor {
 
-        private List<Expression> results = new ArrayList<>();
+        protected List<Expression> results = new ArrayList<>();
 
-        private List<Expression> conditionalResults = new ArrayList<>();
+        protected List<Expression> conditionalResults = new ArrayList<>();
+
+        protected boolean collectionAllowed = false;
+
+        protected int conditionalStage = 0;
+
+        protected void addToResult(Expression node) {
+            if (conditionalStage > 0) {
+                conditionalResults.add(node);
+            } else {
+                results.clear();
+                results.add(node);
+            }
+        }
+
+
+        protected void handleResults() {
+            List<Expression> allResults = new ArrayList<Expression>(results);
+            allResults.addAll(conditionalResults);
+
+            for (Expression result : allResults) {
+                if (result instanceof StringLiteral || result instanceof Select) {
+                    handleSimpleFieldDereferences(result);
+                } else if (result instanceof VariableReference) {
+                    VariableValueVisitor variableVisitor = new VariableValueVisitor();
+                    variableVisitor.findValuesForVariableReference((VariableReference) result);
+                } else if (result instanceof MethodInvocation) {
+                    MethodInvocation invocation = (MethodInvocation) result;
+
+                    // only handle methods that seem to be local
+                    if (invocation.astOperand() != null && !(invocation.astOperand() instanceof This)) {
+                        log("    StagedResultVisitor.handleResults: method (%s) is not local, operand = %s (%s)",
+                                invocation.astName(), invocation.astOperand(), invocation.astOperand().getClass());
+                        continue;
+                    }
+
+                    MethodValueVisitor methodVisitor = new MethodValueVisitor();
+                    methodVisitor.findValuesForMethodInvocation(invocation);
+                }
+            }
+        }
+
+        @Override
+        public void endVisit(Node node) {
+            if (node instanceof VariableDefinitionEntry || node instanceof BinaryExpression) {
+                collectionAllowed = false;
+            } else if (node instanceof InlineIfExpression || node instanceof If) {
+                -- conditionalStage;
+            }
+        }
+
+        @Override
+        public boolean visitInlineIfExpression(InlineIfExpression node) {
+            ++ conditionalStage;
+            return false;
+        }
+
+        @Override
+        public boolean visitIf(If node) {
+            ++ conditionalStage;
+            return super.visitIf(node);
+        }
+    }
+
+    private class VariableValueVisitor extends StagedResultVisitor {
 
         private VariableReference subject;
 
-        private boolean collectionAllowed = false;
-
-        private int conditionalStage = 0;
+        private Block visitationBoundary;
 
         public void findValuesForVariableReference(VariableReference variable) {
             Node surroundingMethod = JavaContext.findSurroundingMethod(variable);
@@ -180,20 +254,14 @@ public class StringDataFlowDetector {
                 return;
             }
 
-            Block methodBody = null;
+            visitationBoundary = null;
             if (surroundingMethod instanceof MethodDeclaration) {
-                methodBody = ((MethodDeclaration) surroundingMethod).astBody();
-
-                log("    findSurroundingMethod: variable ref = %s, surrounded by = %s", variable,
-                        ((MethodDeclaration) surroundingMethod).astMethodName());
+                visitationBoundary = ((MethodDeclaration) surroundingMethod).astBody();
             } else if (surroundingMethod instanceof ConstructorDeclaration) {
-                methodBody = ((ConstructorDeclaration) surroundingMethod).astBody();
-
-                log("    findSurroundingMethod: variable ref = %s, surrounded by = %s.<init>", variable,
-                        ((ConstructorDeclaration) surroundingMethod).astTypeName());
+                visitationBoundary = ((ConstructorDeclaration) surroundingMethod).astBody();
             }
 
-            if (methodBody == null) {
+            if (visitationBoundary == null) {
                 throw new IllegalStateException("method body was empty");
             }
 
@@ -201,30 +269,15 @@ public class StringDataFlowDetector {
 
             // look for variable definition entry and variable writes
             // pay attention to conditionals
-            methodBody.accept(this);
+            visitationBoundary.accept(this);
 
             // later: recurse if variable is written by method signature
             // stop at boundary of compilation unit
         }
 
-        public List<Expression> retrieveResults() {
-            List<Expression> result = new ArrayList<Expression>(results);
-            result.addAll(conditionalResults);
-            return result;
-        }
-
         private boolean isAcceptableResult(Expression expression) {
             return expression instanceof Select || expression instanceof StringLiteral
                     || expression instanceof MethodInvocation;
-        }
-
-        private void addToResult(Expression node) {
-            if (conditionalStage > 0) {
-                conditionalResults.add(node);
-            } else {
-                results.clear();
-                results.add(node);
-            }
         }
 
         @Override
@@ -245,19 +298,15 @@ public class StringDataFlowDetector {
 
         @Override
         public void endVisit(Node node) {
-            if (node instanceof VariableDefinitionEntry || node instanceof BinaryExpression) {
-                log("    endVisit: expression");
-                collectionAllowed = false;
-            } else if (node instanceof InlineIfExpression || node instanceof If) {
-                log("    endVisit: if");
-                -- conditionalStage;
+            super.endVisit(node);
+            if (node.equals(visitationBoundary)) {
+                log("    endVisit of top level method");
+                handleResults(); // this brings kind of a recursion
             }
         }
 
         @Override
         public boolean visitBinaryExpression(BinaryExpression node) {
-            log("    VariableValueVisitor.visitBinaryExpression: %s", node);
-
             if (!(node.astLeft() instanceof VariableReference)) {
                 return true;
             }
@@ -267,6 +316,8 @@ public class StringDataFlowDetector {
             if (!assignmentVarName.equals(subject.astIdentifier().astValue())) {
                 return true;
             }
+
+            log("    VariableValueVisitor.visitBinaryExpression: %s", node);
 
             if (!node.astOperator().isAssignment()) {
                 log("    VariableValueVisitor.visitBinaryExpression: not an assignment (type = %s)", node.astOperator());
@@ -278,24 +329,7 @@ public class StringDataFlowDetector {
         }
 
         @Override
-        public boolean visitInlineIfExpression(InlineIfExpression node) {
-            log("    VariableValueVisitor.visitInlineIfExpression: %s", node);
-
-            ++ conditionalStage;
-            return false;
-        }
-
-        @Override
-        public boolean visitIf(If node) {
-            log("    VariableValueVisitor.visitIf: if (%s)", node.astCondition());
-
-            ++ conditionalStage;
-            return super.visitIf(node);
-        }
-
-        @Override
         public boolean visitExpressionStatement(ExpressionStatement node) {
-            log("    VariableValueVisitor.visitExpressionStatement (if): %s", node);
             if (conditionalStage == 0) {
                 return false; // do not return true as blocks that yet have to be discovered should still be included
             }
@@ -306,11 +340,9 @@ public class StringDataFlowDetector {
         @Override
         public boolean visitStringLiteral(StringLiteral node) {
             if (!collectionAllowed) {
-                log("    VariableValueVisitor.visitStringLiteral (%s): collection not allowed", node);
                 return true;
             }
 
-            log("    VariableValueVisitor.visitStringLiteral: %s", node);
             addToResult(node);
             return true;
         }
@@ -318,7 +350,6 @@ public class StringDataFlowDetector {
         @Override
         public boolean visitVariableReference(VariableReference node) {
             if (!collectionAllowed) {
-                log("    VariableValueVisitor.visitVariableReference (%s): collection not allowed", node.astIdentifier());
                 return true;
             }
 
@@ -326,7 +357,6 @@ public class StringDataFlowDetector {
                 return true; // this a assignment to the subject variable
             }
 
-            log("    VariableValueVisitor.visitVariableReference: %s", node);
             addToResult(node);
             return super.visitVariableReference(node);
         }
@@ -334,11 +364,9 @@ public class StringDataFlowDetector {
         @Override
         public boolean visitMethodInvocation(MethodInvocation node) {
             if (!collectionAllowed) {
-                log("    VariableValueVisitor.visitMethodInvocation (%s): collection not allowed", node.astName());
                 return true;
             }
 
-            log("    VariableValueVisitor.visitMethodInvocation: %s", node);
             addToResult(node);
             return super.visitMethodInvocation(node);
         }
@@ -355,6 +383,108 @@ public class StringDataFlowDetector {
 
             // DO NOT CHANGE as e.g. "LocationManager.GPS_PROVIDER" would add a false VariableReference
             // to LocationManager otherwise instead
+            return true;
+        }
+    }
+
+    private class MethodValueVisitor extends StagedResultVisitor {
+
+        private MethodInvocation subject;
+
+        private CompilationUnit compilationUnit;
+
+        private MethodDeclaration visitationBoundary;
+
+        public void findValuesForMethodInvocation(MethodInvocation method) {
+            subject = method;
+
+            compilationUnit = (CompilationUnit) context.getCompilationUnit();
+            compilationUnit.accept(this);
+        }
+
+        @Override
+        public void endVisit(Node node) {
+            super.endVisit(node);
+            if (node.getClass() == Return.class) {
+                collectionAllowed = false;
+            } else if (node.equals(visitationBoundary)) {
+                log("      MethodValueVisitor.endVisit of top level method");
+                handleResults(); // this brings kind of a recursion
+            }
+        }
+
+        @Override
+        public boolean visitMethodDeclaration(MethodDeclaration node) {
+            if (!node.astMethodName().astValue().equals(subject.astName().astValue())) {
+                return true;
+            }
+
+            visitationBoundary = node;
+
+            log("      MethodValueVisitor.visitMethodDeclaration: %s", node.astMethodName());
+            return super.visitMethodDeclaration(node);
+        }
+
+        @Override
+        public boolean visitReturn(Return node) {
+            log("      MethodValueVisitor.visitReturn: %s", node);
+            collectionAllowed = true;
+            return false;
+        }
+
+        @Override
+        public boolean visitStringLiteral(StringLiteral node) {
+            if (!collectionAllowed) {
+                return true;
+            }
+
+            log("      MethodValueVisitor.visitStringLiteral: %s", node);
+            addToResult(node);
+            return true;
+        }
+
+        @Override
+        public boolean visitSelect(Select node) {
+            if (!collectionAllowed) {
+                return true;
+            }
+
+            log("      MethodValueVisitor.visitSelect: %s", node);
+            addToResult(node);
+            return true;
+        }
+
+        @Override
+        public boolean visitMethodInvocation(MethodInvocation node) {
+            if (!collectionAllowed) {
+                return true;
+            }
+
+            // prevent recursion by checking calls to current method
+            if (node.astName().astValue().equals(subject.astName().astValue())) {
+                return true;
+            }
+
+            log("      MethodValueVisitor.visitMethodInvocation: %s", node);
+
+            MethodValueVisitor methodVisitor = new MethodValueVisitor();
+            methodVisitor.findValuesForMethodInvocation(node);
+
+            return true;
+        }
+
+        @Override
+        public boolean visitVariableReference(VariableReference node) {
+            if (!collectionAllowed) {
+                return true;
+            }
+
+            log("      MethodValueVisitor.visitVariableReference: %s", node);
+
+            // inspect further using VariableValueVisitor
+            VariableValueVisitor valueVisitor = new VariableValueVisitor();
+            valueVisitor.findValuesForVariableReference(node);
+
             return true;
         }
     }
