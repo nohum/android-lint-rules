@@ -135,8 +135,7 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
             handleProximityMethods(context, node);
         }
         // ... also semantic change of when a exception is thrown
-        else if (METHOD_IS_PROVIDER_ENABLED.equals(calledMethod) && true || getTargetSdk(context) < API_LEVEL_LOLLIPOP) {
-            // TODO attention, remove upper condition
+        else if (METHOD_IS_PROVIDER_ENABLED.equals(calledMethod) && getTargetSdk(context) < API_LEVEL_LOLLIPOP) {
             handleProviderEnabled(context, node);
         }
         // these calls depend on the used location provider
