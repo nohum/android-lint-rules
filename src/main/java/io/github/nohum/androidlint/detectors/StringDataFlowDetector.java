@@ -31,7 +31,7 @@ public class StringDataFlowDetector {
         results.add(data);
     }
 
-    public void startInspectionOnNode(Expression start) {
+    public void startInspectionOnExpression(Expression start) {
         results.clear();
 
         if (handleSimpleFieldDereferences(start)) {
@@ -43,7 +43,7 @@ public class StringDataFlowDetector {
         start.accept(firstPass);
 
         if (!firstPass.foundSomething()) {
-            log("startInspectionOnNode: have not found anything in first pass");
+            log("startInspectionOnExpression: nothing found anything in first pass");
             return;
         }
 

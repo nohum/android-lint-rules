@@ -41,6 +41,8 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
     public static final String FINE_LOCATION_PERMISSION = "android.permission.ACCESS_FINE_LOCATION";
 
     private static final String CLASS_LOCATION_MANAGER = "android.location.LocationManager";
+    private static final String CLASS_JAVA_STRING = "java.lang.String";
+    private static final String CLASS_LOCATION_CRITERIA = "android.location.Criteria";
 
     private static final String LOCATION_METHOD_FINE = "gps";
     private static final String LOCATION_METHOD_COARSE = "network";
@@ -151,52 +153,77 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
     private void handleRequestMethods(JavaContext context, MethodInvocation method, AstVisitor visitor) {
         // to make matters worse, there are many overloaded versions of the methods at hand
         // we only look at the string versions here.
+        log("handleRequestMethods ------------------------------");
 
-        // TODO fix me
-        String usedLocationProvider = null;
+        JavaParser.ResolvedMethod originalMethod = (JavaParser.ResolvedMethod) context.resolve(method);
+        int argumentNumber = 0;
+        boolean providerMode = false;
+        boolean criteriaMode = false;
 
+        for (int i = 0; i < originalMethod.getArgumentCount(); ++ i) {
+            JavaParser.TypeDescriptor type = originalMethod.getArgumentType(i);
+            argumentNumber = i;
 
-                    /*
-            StrictListAccessor<Expression, MethodInvocation> argumentList = node.astArguments();
-            if (argumentList != null && argumentList.size() == 1) {
-                Expression expression = argumentList.first();
-                if (expression instanceof StringLiteral) {
-                    StringLiteral argument = (StringLiteral)expression;
-                    String parameter = argument.astValue();
-                    checkParameter(context, node, argument, parameter, false);
-                } else {
-                    JavaParser.ResolvedNode resolve = context.resolve(expression);
-                    if (resolve instanceof JavaParser.ResolvedField) {
-                        JavaParser.ResolvedField field = (JavaParser.ResolvedField) resolve;
-                        Object value = field.getValue();
-                        if (value instanceof String) {
-                            checkParameter(context, node, expression, (String)value, true);
-                        }
-                    }
-                }
+            if (type.getName().equals(CLASS_JAVA_STRING)) {
+                providerMode = true;
+                break;
             }
-            */
 
-//        if (!hasFinePermission && LOCATION_METHOD_FINE.equals(usedLocationProvider)) {
-//            reportDefault(context, method, FINE_LOCATION_PERMISSION);
-//        } else if (!hasCoarsePermission && (LOCATION_METHOD_COARSE.equals(usedLocationProvider)
-//                || LOCATION_METHOD_PASSIVE.equals(usedLocationProvider))) {
-//            reportDefault(context, method, COARSE_LOCATION_PERMISSION);
-//        }
+            if (type.getName().equals(CLASS_LOCATION_CRITERIA)) {
+                criteriaMode = true;
+                break;
+            }
+        }
+
+        Expression actualArgumentData = null;
+        int currCount = 0;
+        for (Expression argument : method.astArguments()) {
+            if (argumentNumber == currCount) {
+                actualArgumentData = argument;
+                break;
+            }
+
+            ++ currCount;
+        }
+
+        if (actualArgumentData == null) {
+            throw new IllegalStateException("argument node was null, should not happen");
+        }
+
+        List<String> providers = new ArrayList<>();
+        if (providerMode) {
+            log("handleRequestMethods: in provider-mode, expression = %s", actualArgumentData);
+
+            StringDataFlowDetector providerVisitor = new StringDataFlowDetector(context);
+            providerVisitor.startInspectionOnExpression(actualArgumentData);
+            providers = providerVisitor.getResults();
+        } else if (criteriaMode) {
+            log("handleRequestMethods: in criteria-mode, expression = %s", actualArgumentData);
+
+        }
+
+        for (String provider : providers) {
+            if (!hasFinePermission && LOCATION_METHOD_FINE.equals(provider)) {
+                reportDefault(context, method, FINE_LOCATION_PERMISSION);
+            } else if (!hasCoarsePermission && (LOCATION_METHOD_COARSE.equals(provider)
+                    || LOCATION_METHOD_PASSIVE.equals(provider))) {
+                reportDefault(context, method, COARSE_LOCATION_PERMISSION);
+            }
+        }
     }
 
     private void handleProviderEnabled(JavaContext context, MethodInvocation method) {
-        // method takes exactly one argument
-
+        log("handleProviderEnabled ------------------------------");
         StrictListAccessor<Expression, MethodInvocation> argumentList = method.astArguments();
 
+        // method takes exactly one argument
         if (argumentList == null || argumentList.size() != 1) {
             log("handleProviderEnabled: method signature did not match");
             return;
         }
 
         StringDataFlowDetector visitor = new StringDataFlowDetector(context);
-        visitor.startInspectionOnNode(argumentList.first());
+        visitor.startInspectionOnExpression(argumentList.first());
         List<String> providers = visitor.getResults();
 
         log("handleProviderEnabled: call %s\n  -> yielded result: %s", method, Arrays.toString(providers.toArray()));
