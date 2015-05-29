@@ -128,7 +128,7 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
 
         // some calls always require fine permission
         if (!hasFinePermission && METHOD_ADD_GPS_LISTENER.equals(calledMethod) || METHOD_ADD_NMEA_LISTENER.equals(calledMethod)) {
-            reportDefault(context, node, FINE_LOCATION_PERMISSION);
+            reportDefaultIssue(context, node, FINE_LOCATION_PERMISSION);
         }
         // the semantics of what these methods accept and when they throw an exception has been changed at some point
         else if (METHOD_ADD_PROXIMITRY_ALERT.equals(calledMethod) || METHOD_REMOVE_PROXIMITRY_ALERT.equals(calledMethod)) {
@@ -145,7 +145,7 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
         }
     }
 
-    private void reportDefault(JavaContext context, MethodInvocation method, String requiredPermission) {
+    private void reportDefaultIssue(JavaContext context, MethodInvocation method, String requiredPermission) {
         context.report(ISSUE, method, context.getLocation(method),
                 String.format("Call to `%s` requires `%s`", method.astName().astValue(), requiredPermission));
     }
@@ -204,10 +204,10 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
 
         for (String provider : providers) {
             if (!hasFinePermission && LOCATION_METHOD_FINE.equals(provider)) {
-                reportDefault(context, method, FINE_LOCATION_PERMISSION);
+                reportDefaultIssue(context, method, FINE_LOCATION_PERMISSION);
             } else if (!hasCoarsePermission && (LOCATION_METHOD_COARSE.equals(provider)
                     || LOCATION_METHOD_PASSIVE.equals(provider))) {
-                reportDefault(context, method, COARSE_LOCATION_PERMISSION);
+                reportDefaultIssue(context, method, COARSE_LOCATION_PERMISSION);
             }
         }
     }
@@ -238,24 +238,24 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
          */
         for (String provider : providers) {
             if (LOCATION_METHOD_FINE.equals(provider) && !hasFinePermission) {
-                reportDefault(context, method, FINE_LOCATION_PERMISSION);
+                reportDefaultIssue(context, method, FINE_LOCATION_PERMISSION);
                 break;
             }
 
             if (LOCATION_METHOD_COARSE.equals(provider) && !hasCoarsePermission) {
-                reportDefault(context, method, COARSE_LOCATION_PERMISSION);
+                reportDefaultIssue(context, method, COARSE_LOCATION_PERMISSION);
                 break;
             }
 
             if (LOCATION_METHOD_PASSIVE.equals(provider) && !hasCoarsePermission) {
-                reportDefault(context, method, COARSE_LOCATION_PERMISSION);
+                reportDefaultIssue(context, method, COARSE_LOCATION_PERMISSION);
                 break;
             }
         }
     }
 
     private void handleProximityMethods(JavaContext context, MethodInvocation method) {
-        // starting with level 17, fine location is required
+        // starting with api level 17, fine location is required
         if (getTargetSdk(context) >= API_LEVEL_JELLY_BEAN_MR1 && !hasFinePermission) {
             context.report(ISSUE, method, context.getLocation(method),
                     String.format("Call to `%s` requires `%s` (starting with api %d)", method.astName().astValue(),
@@ -263,7 +263,7 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
         }
 
         if (getTargetSdk(context) < API_LEVEL_JELLY_BEAN_MR1 && !hasFinePermission && !hasCoarsePermission) {
-            reportDefault(context, method, COARSE_LOCATION_PERMISSION);
+            reportDefaultIssue(context, method, COARSE_LOCATION_PERMISSION);
         }
     }
 
