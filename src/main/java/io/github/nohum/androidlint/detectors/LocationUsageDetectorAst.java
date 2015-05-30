@@ -177,10 +177,6 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
             ++ currCount;
         }
 
-        if (actualArgumentData == null) {
-            throw new IllegalStateException("argument node was null, should not happen");
-        }
-
         List<String> providers = new ArrayList<>();
         if (providerMode) {
             log("handleRequestMethods: in provider-mode, expression = %s", actualArgumentData);
