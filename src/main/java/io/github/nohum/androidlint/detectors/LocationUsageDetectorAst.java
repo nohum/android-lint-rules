@@ -41,8 +41,6 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
     public static final String FINE_LOCATION_PERMISSION = "android.permission.ACCESS_FINE_LOCATION";
 
     private static final String CLASS_LOCATION_MANAGER = "android.location.LocationManager";
-    private static final String CLASS_JAVA_STRING = "java.lang.String";
-    private static final String CLASS_LOCATION_CRITERIA = "android.location.Criteria";
 
     private static final String LOCATION_METHOD_FINE = "gps";
     private static final String LOCATION_METHOD_COARSE = "network";
@@ -157,19 +155,13 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
         JavaParser.ResolvedMethod originalMethod = (JavaParser.ResolvedMethod) context.resolve(method);
         int argumentNumber = 0;
         boolean providerMode = false;
-        boolean criteriaMode = false;
 
         for (int i = 0; i < originalMethod.getArgumentCount(); ++ i) {
             JavaParser.TypeDescriptor type = originalMethod.getArgumentType(i);
             argumentNumber = i;
 
-            if (type.getName().equals(CLASS_JAVA_STRING)) {
+            if (type.getName().equals(JavaParser.TYPE_STRING)) {
                 providerMode = true;
-                break;
-            }
-
-            if (type.getName().equals(CLASS_LOCATION_CRITERIA)) {
-                criteriaMode = true;
                 break;
             }
         }
@@ -196,9 +188,6 @@ public class LocationUsageDetectorAst extends Detector implements Detector.XmlSc
             StringDataFlowDetector providerVisitor = new StringDataFlowDetector(context);
             providerVisitor.startInspectionOnExpression(actualArgumentData);
             providers = providerVisitor.getResults();
-        } else if (criteriaMode) {
-            log("handleRequestMethods: in criteria-mode, expression = %s", actualArgumentData);
-
         }
 
         for (String provider : providers) {
