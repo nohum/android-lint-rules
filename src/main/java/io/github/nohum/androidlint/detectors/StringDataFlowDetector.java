@@ -10,7 +10,7 @@ import java.util.List;
 
 public class StringDataFlowDetector {
 
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     private JavaContext context;
 
