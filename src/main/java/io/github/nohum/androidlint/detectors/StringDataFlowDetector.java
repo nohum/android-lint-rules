@@ -338,6 +338,7 @@ public class StringDataFlowDetector {
                 return false; // do not return true as blocks that yet have to be discovered should still be included
             }
 
+            log("    VariableValueVisitor.visitExpressionStatement: %s", node);
             return super.visitExpressionStatement(node);
         }
 
@@ -368,6 +369,7 @@ public class StringDataFlowDetector {
         @Override
         public boolean visitMethodInvocation(MethodInvocation node) {
             if (!collectionAllowed) {
+                log("    VariableValueVisitor.visitMethodInvocation (%s): collection not allowed", node);
                 return true;
             }
 
