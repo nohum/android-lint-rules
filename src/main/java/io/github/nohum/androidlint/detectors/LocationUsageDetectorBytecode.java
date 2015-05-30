@@ -8,7 +8,7 @@ import com.android.tools.lint.detector.api.*;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
-import org.objectweb.asm.tree.analysis.AnalyzerException;
+import org.objectweb.asm.tree.analysis.*;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Element;
 
@@ -176,7 +176,7 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
             return;
         }
 
-        List<String> providers = graph.getPossibleProviders();
+        List<String> providers = graph.getPossibleProviders(method);
         log("providers = %s", Arrays.toString(providers.toArray()));
 
         for (String provider : providers) {
@@ -202,7 +202,7 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
             return;
         }
 
-        List<String> providers = graph.getPossibleProviders();
+        List<String> providers = graph.getPossibleProviders(method);
         log("providers = %s", Arrays.toString(providers.toArray()));
 
         for (String provider : providers) {
