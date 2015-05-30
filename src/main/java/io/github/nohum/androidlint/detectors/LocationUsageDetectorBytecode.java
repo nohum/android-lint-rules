@@ -3,8 +3,10 @@ package io.github.nohum.androidlint.detectors;
 import com.android.annotations.NonNull;
 import com.android.sdklib.AndroidVersion;
 import com.android.tools.lint.checks.ControlFlowGraph;
+import com.android.tools.lint.client.api.JavaParser;
 import com.android.tools.lint.detector.api.*;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
 import org.objectweb.asm.tree.analysis.AnalyzerException;
 import org.w3c.dom.Attr;
@@ -148,6 +150,21 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
 
     private void handleRequestMethods(ClassContext context, ClassNode clazz, MethodNode method, MethodInsnNode call) {
         log("handleRequestMethods ----------------------------------------------------------");
+
+        boolean providerMode = false;
+        Type[] callArgumentTypes = Type.getArgumentTypes(call.desc);
+        for (Type argType : callArgumentTypes) {
+            if (argType.getClassName().equals(JavaParser.TYPE_STRING)) {
+                providerMode = true;
+                break;
+            }
+        }
+
+        if (!providerMode) {
+            log("no provider (string type) found in signature");
+            return;
+        }
+
         StringDataFlowGraph graph = new StringDataFlowGraph(call);
 
         try {
