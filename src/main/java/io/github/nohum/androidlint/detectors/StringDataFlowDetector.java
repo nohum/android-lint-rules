@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * Self-made data-flow analysis for strings, operating on the Java abstract syntax tree.
+ */
 public class StringDataFlowDetector {
 
     private static final boolean DEBUG = false;

@@ -2,9 +2,11 @@ package io.github.nohum.androidlint.detectors;
 
 import com.android.annotations.NonNull;
 import com.android.sdklib.AndroidVersion;
+import com.android.tools.lint.checks.ControlFlowGraph;
 import com.android.tools.lint.detector.api.*;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.*;
+import org.objectweb.asm.tree.analysis.AnalyzerException;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Element;
 
@@ -32,6 +34,8 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
             Severity.ERROR,
             new Implementation(LocationUsageDetectorBytecode.class, EnumSet.of(Scope.MANIFEST, Scope.CLASS_FILE)));
 
+    private static final boolean DEBUG = true;
+
     /** Permission name of coarse location permission */
     public static final String COARSE_LOCATION_PERMISSION = "android.permission.ACCESS_COARSE_LOCATION";
 
@@ -46,10 +50,10 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
 
     private static final String METHOD_ADD_GPS_LISTENER = "addGpsStatusListener";
     private static final String METHOD_ADD_NMEA_LISTENER = "addNmeaListener";
-    private static final String METHOD_ADD_PROXIMITRY_ALERT = "addProximityAlert";
+    private static final String METHOD_ADD_PROXIMITY_ALERT = "addProximityAlert";
     private static final String METHOD_GET_LAST_KNOWN_LOCATION = "getLastKnownLocation";
     private static final String METHOD_IS_PROVIDER_ENABLED = "isProviderEnabled";
-    private static final String METHOD_REMOVE_PROXIMITRY_ALERT = "removeProximityAlert";
+    private static final String METHOD_REMOVE_PROXIMITY_ALERT = "removeProximityAlert";
     private static final String METHOD_REQUEST_LOCATION_UPDATES = "requestLocationUpdates";
     private static final String METHOD_REQUEST_SINGLE_UPDATE = "requestSingleUpdate";
 
@@ -61,6 +65,12 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
     private boolean hasCoarsePermission = false;
 
     private boolean hasFinePermission = false;
+
+    private void log(String format, Object... args) {
+        if (DEBUG) {
+            System.out.println(String.format(format, args));
+        }
+    }
 
     @Override
     public Collection<String> getApplicableElements() {
@@ -90,10 +100,10 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
         return Arrays.asList(
                 METHOD_ADD_GPS_LISTENER,
                 METHOD_ADD_NMEA_LISTENER,
-                METHOD_ADD_PROXIMITRY_ALERT, // requires further api level check
+                METHOD_ADD_PROXIMITY_ALERT, // requires further api level check
                 METHOD_GET_LAST_KNOWN_LOCATION,
                 METHOD_IS_PROVIDER_ENABLED, // requires further api level check
-                METHOD_REMOVE_PROXIMITRY_ALERT, // requires further api level check
+                METHOD_REMOVE_PROXIMITY_ALERT, // requires further api level check
                 METHOD_REQUEST_LOCATION_UPDATES,
                 METHOD_REQUEST_SINGLE_UPDATE
         );
@@ -102,99 +112,94 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
     @Override
     public void checkCall(@NonNull ClassContext context, @NonNull ClassNode classNode, @NonNull MethodNode method,
                           @NonNull MethodInsnNode call) {
-        if (call.getOpcode() != Opcodes.INVOKEVIRTUAL) {
-            return;
-        }
-
-        if (!call.owner.equals(CLASS_LOCATION_MANAGER)) {
+        if (call.getOpcode() != Opcodes.INVOKEVIRTUAL || !call.owner.equals(CLASS_LOCATION_MANAGER)) {
             return;
         }
 
         // used to print class byte code representations
-        // easiest way to get that to work: include in project build.gradle classpath with: classpath 'org.ow2.asm:asm-debug-all:5.0.3'
+        // easiest way to get that to work: include in Android app project build.gradle classpath with: classpath 'org.ow2.asm:asm-debug-all:5.0.3'
         // classNode.accept(new TraceClassVisitor(new PrintWriter(System.out)));
 
         String calledMethod = call.name;
 
         // some calls always require fine permission
         if (!hasFinePermission && METHOD_ADD_GPS_LISTENER.equals(calledMethod) || METHOD_ADD_NMEA_LISTENER.equals(calledMethod)) {
-            reportDefault(context, method, call, FINE_LOCATION_PERMISSION);
+            reportDefaultIssue(context, method, call, FINE_LOCATION_PERMISSION);
         }
         // the semantics of what these methods accept and when they throw an exception has been changed at some point
-        else if (METHOD_ADD_PROXIMITRY_ALERT.equals(calledMethod) || METHOD_REMOVE_PROXIMITRY_ALERT.equals(calledMethod)) {
+        else if (METHOD_ADD_PROXIMITY_ALERT.equals(calledMethod) || METHOD_REMOVE_PROXIMITY_ALERT.equals(calledMethod)) {
             handleProximityMethods(context, method, call);
         }
         // ... also semantic change of when a exception is thrown
         else if (METHOD_IS_PROVIDER_ENABLED.equals(calledMethod) && getTargetSdk(context) < API_LEVEL_LOLLIPOP) {
-            handleProviderEnabled(context, method, call);
+            handleProviderEnabled(context, classNode, method, call);
         }
         // these calls depend on the used location provider
         else if (METHOD_REQUEST_LOCATION_UPDATES.equals(calledMethod) || METHOD_REQUEST_SINGLE_UPDATE.equals(calledMethod)) {
-            handleRequestMethods(context, method, call);
+            handleRequestMethods(context, classNode, method, call);
         }
     }
 
-    private void reportDefault(ClassContext context, MethodNode method, MethodInsnNode call, String requiredPermission) {
-        context.report(ISSUE, method, call, context.getLocation(call),
-                String.format("Call to `%s` requires `%s`", call.name, requiredPermission));
+    private void reportDefaultIssue(ClassContext context, MethodNode method, MethodInsnNode call,
+                                    String requiredPermission) {
+        context.report(ISSUE, method, call, context.getLocation(call), String.format(
+                "Call to `%s` requires `%s`", call.name, requiredPermission));
     }
 
-    private void handleRequestMethods(ClassContext context, MethodNode method, MethodInsnNode call) {
-        // to make matters worse, there are many overloaded versions of the methods at hand
-        // we only look at the string versions here.
+    private void handleRequestMethods(ClassContext context, ClassNode clazz, MethodNode method, MethodInsnNode call) {
+        log("handleRequestMethods ----------------------------------------------------------");
+        StringDataFlowGraph graph = new StringDataFlowGraph(call);
 
-        // do a heuristic search for the expected location provider strings
-        AbstractInsnNode prev = call;
-        String usedLocationProvider = null;
-        while ((prev = LintUtils.getPrevInstruction(prev)) != null) {
-            if (prev instanceof LdcInsnNode && ((LdcInsnNode) prev).cst instanceof String) {
-                String tempData = (String) ((LdcInsnNode) prev).cst;
-
-                if (LOCATION_METHOD_FINE.equals(tempData) || LOCATION_METHOD_COARSE.equals(tempData)
-                        || LOCATION_METHOD_PASSIVE.equals(tempData)) {
-                    usedLocationProvider = tempData;
-                    break;
-                }
-            }
-        }
-
-        if (!hasFinePermission && LOCATION_METHOD_FINE.equals(usedLocationProvider)) {
-            reportDefault(context, method, call, FINE_LOCATION_PERMISSION);
-        } else if (!hasCoarsePermission && (LOCATION_METHOD_COARSE.equals(usedLocationProvider)
-                || LOCATION_METHOD_PASSIVE.equals(usedLocationProvider))) {
-            reportDefault(context, method, call, COARSE_LOCATION_PERMISSION);
-        }
-    }
-
-    private void handleProviderEnabled(ClassContext context, MethodNode method, MethodInsnNode call) {
-        // previous to the INVOKEVIRTUAL call, there is an LDC call putting the provider on the stack, e.g.:
-        // HOWEVER, only if that value is not resolved using e.g. a separate method!!
-        //  ALOAD 2
-        //  LDC "gps"
-        //  INVOKEVIRTUAL android/location/LocationManager.isProviderEnabled (Ljava/lang/String;)Z
-        //  POP
-
-        AbstractInsnNode prev = LintUtils.getPrevInstruction(call);
-        if (!(prev instanceof LdcInsnNode)) {
-            return; // if not, there is something wrong here...
-        }
-
-        // the provider should actually be a string
-        if (!(((LdcInsnNode) prev).cst instanceof String)) {
+        try {
+            ControlFlowGraph.create(graph, clazz, method);
+//            log(graph.toString(graph.getNode(call)));
+        } catch (AnalyzerException e) {
+            context.log(e, "analysis exception");
+            log("exception occurred: %s", e.getMessage());
             return;
         }
 
-        String provider = (String) ((LdcInsnNode) prev).cst;
-        if (LOCATION_METHOD_FINE.equals(provider) && !hasFinePermission) {
-            reportDefault(context, method, call, FINE_LOCATION_PERMISSION);
+        List<String> providers = graph.getPossibleProviders();
+        log("providers = %s", Arrays.toString(providers.toArray()));
+
+        for (String provider : providers) {
+            if (!hasFinePermission && LOCATION_METHOD_FINE.equals(provider)) {
+                reportDefaultIssue(context, method, call, FINE_LOCATION_PERMISSION);
+            } else if (!hasCoarsePermission && (LOCATION_METHOD_COARSE.equals(provider)
+                    || LOCATION_METHOD_PASSIVE.equals(provider))) {
+                reportDefaultIssue(context, method, call, COARSE_LOCATION_PERMISSION);
+            }
+        }
+    }
+
+    private void handleProviderEnabled(ClassContext context, ClassNode clazz, MethodNode method, MethodInsnNode call) {
+        log("handleProviderEnabled ----------------------------------------------------------");
+        StringDataFlowGraph graph = new StringDataFlowGraph(call);
+
+        try {
+            ControlFlowGraph.create(graph, clazz, method);
+//            log(graph.toString(graph.getNode(call)));
+        } catch (AnalyzerException e) {
+            context.log(e, "analysis exception");
+            log("exception occurred: %s", e.getMessage());
+            return;
         }
 
-        if (LOCATION_METHOD_COARSE.equals(provider) && !hasCoarsePermission) {
-            reportDefault(context, method, call, COARSE_LOCATION_PERMISSION);
-        }
+        List<String> providers = graph.getPossibleProviders();
+        log("providers = %s", Arrays.toString(providers.toArray()));
 
-        if (LOCATION_METHOD_PASSIVE.equals(provider) && !hasCoarsePermission) {
-            reportDefault(context, method, call, COARSE_LOCATION_PERMISSION);
+        for (String provider : providers) {
+            if (LOCATION_METHOD_FINE.equals(provider) && !hasFinePermission) {
+                reportDefaultIssue(context, method, call, FINE_LOCATION_PERMISSION);
+            }
+
+            if (LOCATION_METHOD_COARSE.equals(provider) && !hasCoarsePermission) {
+                reportDefaultIssue(context, method, call, COARSE_LOCATION_PERMISSION);
+            }
+
+            if (LOCATION_METHOD_PASSIVE.equals(provider) && !hasCoarsePermission) {
+                reportDefaultIssue(context, method, call, COARSE_LOCATION_PERMISSION);
+            }
         }
     }
 
@@ -207,7 +212,7 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
         }
 
         if (getTargetSdk(context) < API_LEVEL_JELLY_BEAN_MR1 && !hasFinePermission && !hasCoarsePermission) {
-            reportDefault(context, method, call, COARSE_LOCATION_PERMISSION);
+            reportDefaultIssue(context, method, call, COARSE_LOCATION_PERMISSION);
         }
     }
 
