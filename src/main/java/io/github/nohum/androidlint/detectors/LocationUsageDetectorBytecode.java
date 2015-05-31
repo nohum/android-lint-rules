@@ -191,32 +191,29 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
 
     private void handleProviderEnabled(ClassContext context, ClassNode clazz, MethodNode method, MethodInsnNode call) {
         log("handleProviderEnabled ----------------------------------------------------------");
-        StringDataFlowGraph graph = new StringDataFlowGraph(call, 0);
 
-        try {
-            ControlFlowGraph.create(graph, clazz, method);
-//            log(graph.toString(graph.getNode(call)));
-        } catch (AnalyzerException e) {
-            context.log(e, "analysis exception");
-            log("exception occurred: %s", e.getMessage());
+        // heuristic approach
+        AbstractInsnNode prev = LintUtils.getPrevInstruction(call);
+        if (!(prev instanceof LdcInsnNode)) {
+            return; // if not, there is something wrong here...
+        }
+
+        // the provider should actually be a string
+        if (!(((LdcInsnNode) prev).cst instanceof String)) {
             return;
         }
 
-        List<String> providers = graph.getPossibleProviders(method);
-        log("providers = %s", Arrays.toString(providers.toArray()));
+        String provider = (String) ((LdcInsnNode) prev).cst;
+        if (LOCATION_METHOD_FINE.equals(provider) && !hasFinePermission) {
+            reportDefaultIssue(context, method, call, FINE_LOCATION_PERMISSION);
+        }
 
-        for (String provider : providers) {
-            if (LOCATION_METHOD_FINE.equals(provider) && !hasFinePermission) {
-                reportDefaultIssue(context, method, call, FINE_LOCATION_PERMISSION);
-            }
+        if (LOCATION_METHOD_COARSE.equals(provider) && !hasCoarsePermission) {
+            reportDefaultIssue(context, method, call, COARSE_LOCATION_PERMISSION);
+        }
 
-            if (LOCATION_METHOD_COARSE.equals(provider) && !hasCoarsePermission) {
-                reportDefaultIssue(context, method, call, COARSE_LOCATION_PERMISSION);
-            }
-
-            if (LOCATION_METHOD_PASSIVE.equals(provider) && !hasCoarsePermission) {
-                reportDefaultIssue(context, method, call, COARSE_LOCATION_PERMISSION);
-            }
+        if (LOCATION_METHOD_PASSIVE.equals(provider) && !hasCoarsePermission) {
+            reportDefaultIssue(context, method, call, COARSE_LOCATION_PERMISSION);
         }
     }
 
