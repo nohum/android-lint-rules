@@ -12,7 +12,7 @@ import java.util.*;
  */
 public class StringDataFlowGraph extends ControlFlowGraph {
 
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     private boolean thisDiscarded = false;
 

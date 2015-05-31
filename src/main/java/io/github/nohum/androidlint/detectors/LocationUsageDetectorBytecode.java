@@ -36,7 +36,7 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
             Severity.ERROR,
             new Implementation(LocationUsageDetectorBytecode.class, EnumSet.of(Scope.MANIFEST, Scope.CLASS_FILE)));
 
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     /** Permission name of coarse location permission */
     public static final String COARSE_LOCATION_PERMISSION = "android.permission.ACCESS_COARSE_LOCATION";
