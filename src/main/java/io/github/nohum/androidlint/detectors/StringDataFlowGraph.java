@@ -154,10 +154,6 @@ public class StringDataFlowGraph extends ControlFlowGraph {
     }
 
     private Queue<AbstractInsnNode> copyQueue(Queue<AbstractInsnNode> varsOnStack) {
-        List<AbstractInsnNode> varsReversed = new ArrayList<>(varsOnStack);
-        // we need to reverse the content as the queue is a LIFO queue
-        Collections.reverse(varsReversed);
-
         return new ArrayDeque<AbstractInsnNode>(varsOnStack);
     }
 
