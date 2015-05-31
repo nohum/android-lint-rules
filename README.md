@@ -21,3 +21,11 @@ rules are tested must be run in non-daemon mode as otherwise the logs are not sh
 ```
 gradle --no-daemon lint
 ```
+
+Included detectors
+------------------
+
+* SocketUsageDetectorAst: From chapter "Checking for Internet-Access without proper Permission", operating on Java abstract syntax trees.
+* SocketUsageDetectorBytecode: From chapter "Checking for Internet-Access without proper Permission", operating on Java byte-code.
+* LocationUsageDetectorAst: From chapter "Validating LocationManager Calls according to Project Configuration",  operating on Java abstract syntax trees.
+* LocationUsageDetectorBytecode: From chapter "Validating LocationManager Calls according to Project Configuration",  operating on Java byte-code.
