@@ -189,9 +189,4 @@ public class StringDataFlowGraph extends ControlFlowGraph {
 
         return instruction.getClass().toString();
     }
-
-    @Override
-    protected void add(AbstractInsnNode from, AbstractInsnNode to) {
-        super.add(from, to);
-    }
 }
