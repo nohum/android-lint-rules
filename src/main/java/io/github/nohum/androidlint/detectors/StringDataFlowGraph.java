@@ -107,7 +107,7 @@ public class StringDataFlowGraph extends ControlFlowGraph {
             logIndent(debugIndentation, "call is on stack: %s with %d args", currentMethodCall.name, args.length);
 
             boolean recordArgument = false;
-            if (currentMethodCall.name.equals(subjectMethodCall.name) && currentMethodCall.owner.equals(subjectMethodCall.owner)) {
+            if (currentMethodCall.equals(subjectMethodCall)) {
                 logIndent(debugIndentation, "-- this call is actually our desired call");
                 recordArgument = true;
             }
@@ -163,19 +163,19 @@ public class StringDataFlowGraph extends ControlFlowGraph {
 
         if (instruction.getClass() == VarInsnNode.class) {
             VarInsnNode varInsnNode = (VarInsnNode) instruction;
-            String type = "<unknown op>";
+            String type = " <unknown op>";
 
             if (varInsnNode.getOpcode() == Opcodes.ILOAD || varInsnNode.getOpcode() == Opcodes.LLOAD
                     || varInsnNode.getOpcode() == Opcodes.FLOAD || varInsnNode.getOpcode() == Opcodes.DLOAD
                     || varInsnNode.getOpcode() == Opcodes.ALOAD) {
-                type = "<load>";
+                type = " <load " + varInsnNode.getOpcode() + ">";
             } else if (varInsnNode.getOpcode() == Opcodes.ISTORE || varInsnNode.getOpcode() == Opcodes.LSTORE
                     || varInsnNode.getOpcode() == Opcodes.FSTORE || varInsnNode.getOpcode() == Opcodes.DSTORE
                     || varInsnNode.getOpcode() == Opcodes.ASTORE) {
-                type = "<store>";
+                type = " <store " + varInsnNode.getOpcode() + ">";
             }
 
-            return instruction.getClass().toString() + " " + type;
+            return instruction.getClass().toString() + type;
         }
 
         return instruction.getClass().toString();
