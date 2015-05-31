@@ -53,12 +53,7 @@ public class StringDataFlowGraph extends ControlFlowGraph {
     public List<String> getPossibleProviders(MethodNode method) {
         log("getPossibleProviders: %s -----------------------------------", method.name);
 
-
-//        Type[] args = Type.getArgumentTypes(method.desc);
-//        log("getPossibleProviders: initial var count on stack: %d", args.length);
-
         Queue<AbstractInsnNode> varsOnStack = new ArrayDeque<AbstractInsnNode>();
-
         Node node = getNode(method.instructions.getFirst());
         inspectNode(node, varsOnStack, 0);
 
@@ -66,40 +61,27 @@ public class StringDataFlowGraph extends ControlFlowGraph {
     }
 
     private void inspectNode(Node node, Queue<AbstractInsnNode> varsOnStack, int debugIndentation) {
-        if (node.instruction.getClass() != LabelNode.class && node.instruction.getClass() != LineNumberNode.class) {
+        if (isNotMarkerInstruction(node)) {
             logIndent(debugIndentation, "inspecting node: %s", nodeToString(node.instruction));
         }
 
-        if (node.instruction.getClass() == InsnNode.class || node.instruction.getClass() == FieldInsnNode.class
-            || node.instruction.getClass() == IntInsnNode.class || node.instruction.getClass() == LdcInsnNode.class) {
+        if (isGeneralVarAddInstruction(node)) {
             logIndent(debugIndentation, "node adds var on stack (curr: %d) -> %s", varsOnStack.size(),
                     nodeToString(node.instruction));
             varsOnStack.add(node.instruction);
         }
 
         // special case! may store opcode for loading as well as storing
-        if (node.instruction.getClass() == VarInsnNode.class) {
-            VarInsnNode varInsnNode = (VarInsnNode) node.instruction;
+        handleSpecialVarInstruction(node, varsOnStack, debugIndentation);
+        handleMethodCallInstruction(node, varsOnStack, debugIndentation);
+        handleSuccessors(node, varsOnStack, debugIndentation);
+    }
 
-            if (varInsnNode.getOpcode() == Opcodes.ILOAD || varInsnNode.getOpcode() == Opcodes.LLOAD
-                    || varInsnNode.getOpcode() == Opcodes.FLOAD || varInsnNode.getOpcode() == Opcodes.DLOAD
-                    || varInsnNode.getOpcode() == Opcodes.ALOAD) {
-                logIndent(debugIndentation, "node is VarInsnNode which loads var (curr: %d)", varsOnStack.size());
+    private boolean isNotMarkerInstruction(Node node) {
+        return node.instruction.getClass() != LabelNode.class && node.instruction.getClass() != LineNumberNode.class;
+    }
 
-                if (thisDiscarded) {
-                    varsOnStack.add(node.instruction);
-                } else if (varInsnNode.getOpcode() == Opcodes.ALOAD) {
-                    logIndent(debugIndentation, "node is VarInsnNode - first call, variable should be \"this\" - discarding!");
-                    thisDiscarded = true;
-                }
-            } else if (varInsnNode.getOpcode() == Opcodes.ISTORE || varInsnNode.getOpcode() == Opcodes.LSTORE
-                    || varInsnNode.getOpcode() == Opcodes.FSTORE || varInsnNode.getOpcode() == Opcodes.DSTORE
-                    || varInsnNode.getOpcode() == Opcodes.ASTORE) {
-                logIndent(debugIndentation, "node is VarInsnNode which stores var (curr: %d)", varsOnStack.size());
-                varsOnStack.poll();
-            }
-        }
-
+    private void handleMethodCallInstruction(Node node, Queue<AbstractInsnNode> varsOnStack, int debugIndentation) {
         if (node.instruction.getClass() == MethodInsnNode.class) {
             MethodInsnNode currentMethodCall = (MethodInsnNode) node.instruction;
             Type[] args = Type.getArgumentTypes(currentMethodCall.desc);
@@ -128,16 +110,47 @@ public class StringDataFlowGraph extends ControlFlowGraph {
             }
             logIndent(debugIndentation, "-- after this call, %d arguments are on the stack", varsOnStack.size());
         }
+    }
 
+    private void handleSpecialVarInstruction(Node node, Queue<AbstractInsnNode> varsOnStack, int debugIndentation) {
+        if (node.instruction.getClass() == VarInsnNode.class) {
+            VarInsnNode varInsnNode = (VarInsnNode) node.instruction;
+
+            if (varInsnNode.getOpcode() == Opcodes.ILOAD || varInsnNode.getOpcode() == Opcodes.LLOAD
+                    || varInsnNode.getOpcode() == Opcodes.FLOAD || varInsnNode.getOpcode() == Opcodes.DLOAD
+                    || varInsnNode.getOpcode() == Opcodes.ALOAD) {
+                logIndent(debugIndentation, "node is VarInsnNode which loads var (curr: %d)", varsOnStack.size());
+
+                if (thisDiscarded) {
+                    varsOnStack.add(node.instruction);
+                } else if (varInsnNode.getOpcode() == Opcodes.ALOAD) {
+                    logIndent(debugIndentation, "node is VarInsnNode - first call, variable should be \"this\" - discarding!");
+                    thisDiscarded = true;
+                }
+            } else if (varInsnNode.getOpcode() == Opcodes.ISTORE || varInsnNode.getOpcode() == Opcodes.LSTORE
+                    || varInsnNode.getOpcode() == Opcodes.FSTORE || varInsnNode.getOpcode() == Opcodes.DSTORE
+                    || varInsnNode.getOpcode() == Opcodes.ASTORE) {
+                logIndent(debugIndentation, "node is VarInsnNode which stores var (curr: %d)", varsOnStack.size());
+                varsOnStack.poll();
+            }
+        }
+    }
+
+    private void handleSuccessors(Node node, Queue<AbstractInsnNode> varsOnStack, int debugIndentation) {
         for (Node successor : node.successors) {
             int level = debugIndentation;
             // these nodes clutter the output, suppress them
-            if (node.instruction.getClass() != LabelNode.class && node.instruction.getClass() != LineNumberNode.class) {
+            if (isNotMarkerInstruction(node)) {
                 ++ level;
             }
 
             inspectNode(successor, copyQueue(varsOnStack), level);
         }
+    }
+
+    private boolean isGeneralVarAddInstruction(Node node) {
+        return node.instruction.getClass() == InsnNode.class || node.instruction.getClass() == FieldInsnNode.class
+            || node.instruction.getClass() == IntInsnNode.class || node.instruction.getClass() == LdcInsnNode.class;
     }
 
     private Queue<AbstractInsnNode> copyQueue(Queue<AbstractInsnNode> varsOnStack) {
