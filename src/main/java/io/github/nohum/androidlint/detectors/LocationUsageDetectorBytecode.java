@@ -165,7 +165,7 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
             return;
         }
 
-        StringDataFlowGraph graph = new StringDataFlowGraph(call);
+        StringDataFlowGraph graph = new StringDataFlowGraph(call, 0);
 
         try {
             ControlFlowGraph.create(graph, clazz, method);
@@ -191,7 +191,7 @@ public class LocationUsageDetectorBytecode extends Detector implements Detector.
 
     private void handleProviderEnabled(ClassContext context, ClassNode clazz, MethodNode method, MethodInsnNode call) {
         log("handleProviderEnabled ----------------------------------------------------------");
-        StringDataFlowGraph graph = new StringDataFlowGraph(call);
+        StringDataFlowGraph graph = new StringDataFlowGraph(call, 0);
 
         try {
             ControlFlowGraph.create(graph, clazz, method);

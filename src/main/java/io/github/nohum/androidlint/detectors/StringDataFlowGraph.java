@@ -1,7 +1,6 @@
 package io.github.nohum.androidlint.detectors;
 
 import com.android.tools.lint.checks.ControlFlowGraph;
-import com.sun.org.apache.bcel.internal.generic.ALOAD;
 import com.sun.org.apache.bcel.internal.generic.Type;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.*;
@@ -15,13 +14,22 @@ public class StringDataFlowGraph extends ControlFlowGraph {
 
     private static final boolean DEBUG = true;
 
+    private boolean thisDiscarded = false;
+
     private List<String> possibleProviders;
 
-    private MethodInsnNode methodCall;
+    private MethodInsnNode subjectMethodCall;
 
-    public StringDataFlowGraph(MethodInsnNode methodCall) {
+    private int desiredArgumentCount;
+
+    /**
+     * @param methodCall the desired method
+     * @param desiredArgumentCount specifies the argument index to record (when calling the method, zero-based).
+     */
+    public StringDataFlowGraph(MethodInsnNode methodCall, int desiredArgumentCount) {
         possibleProviders = new ArrayList<>();
-        this.methodCall = methodCall;
+        this.subjectMethodCall = methodCall;
+        this.desiredArgumentCount = desiredArgumentCount;
     }
 
     private void log(String format, Object... args) {
@@ -49,7 +57,7 @@ public class StringDataFlowGraph extends ControlFlowGraph {
 //        Type[] args = Type.getArgumentTypes(method.desc);
 //        log("getPossibleProviders: initial var count on stack: %d", args.length);
 
-        Queue<AbstractInsnNode> varsOnStack = Collections.asLifoQueue(new ArrayDeque<AbstractInsnNode>());
+        Queue<AbstractInsnNode> varsOnStack = new ArrayDeque<AbstractInsnNode>();
 
         Node node = getNode(method.instructions.getFirst());
         inspectNode(node, varsOnStack, 0);
@@ -58,9 +66,14 @@ public class StringDataFlowGraph extends ControlFlowGraph {
     }
 
     private void inspectNode(Node node, Queue<AbstractInsnNode> varsOnStack, int debugIndentation) {
+        if (node.instruction.getClass() != LabelNode.class && node.instruction.getClass() != LineNumberNode.class) {
+            logIndent(debugIndentation, "inspecting node: %s", nodeToString(node.instruction));
+        }
+
         if (node.instruction.getClass() == InsnNode.class || node.instruction.getClass() == FieldInsnNode.class
             || node.instruction.getClass() == IntInsnNode.class || node.instruction.getClass() == LdcInsnNode.class) {
-            logIndent(debugIndentation, "next node adds var on stack (curr: %d)", varsOnStack.size());
+            logIndent(debugIndentation, "node adds var on stack (curr: %d) -> %s", varsOnStack.size(),
+                    nodeToString(node.instruction));
             varsOnStack.add(node.instruction);
         }
 
@@ -71,46 +84,81 @@ public class StringDataFlowGraph extends ControlFlowGraph {
             if (varInsnNode.getOpcode() == Opcodes.ILOAD || varInsnNode.getOpcode() == Opcodes.LLOAD
                     || varInsnNode.getOpcode() == Opcodes.FLOAD || varInsnNode.getOpcode() == Opcodes.DLOAD
                     || varInsnNode.getOpcode() == Opcodes.ALOAD) {
-                logIndent(debugIndentation, "found VarInsnNode which loads var (curr: %d)", varsOnStack.size());
-                varsOnStack.add(node.instruction);
+                logIndent(debugIndentation, "node is VarInsnNode which loads var (curr: %d)", varsOnStack.size());
+
+                if (thisDiscarded) {
+                    varsOnStack.add(node.instruction);
+                } else if (varInsnNode.getOpcode() == Opcodes.ALOAD) {
+                    logIndent(debugIndentation, "node is VarInsnNode - first call, variable should be \"this\" - discarding!");
+                    thisDiscarded = true;
+                }
             } else if (varInsnNode.getOpcode() == Opcodes.ISTORE || varInsnNode.getOpcode() == Opcodes.LSTORE
                     || varInsnNode.getOpcode() == Opcodes.FSTORE || varInsnNode.getOpcode() == Opcodes.DSTORE
                     || varInsnNode.getOpcode() == Opcodes.ASTORE) {
-                logIndent(debugIndentation, "found VarInsnNode which stores var (curr: %d)", varsOnStack.size());
-                varsOnStack.remove();
+                logIndent(debugIndentation, "node is VarInsnNode which stores var (curr: %d)", varsOnStack.size());
+                varsOnStack.poll();
             }
         }
 
         if (node.instruction.getClass() == MethodInsnNode.class) {
-            MethodInsnNode methodCallNode = (MethodInsnNode) node.instruction;
-            Type[] args = Type.getArgumentTypes(methodCallNode.desc);
+            MethodInsnNode currentMethodCall = (MethodInsnNode) node.instruction;
+            Type[] args = Type.getArgumentTypes(currentMethodCall.desc);
 
-            logIndent(debugIndentation, "call is on stack: %s with %d args", methodCallNode.name, args.length);
-            for (int i = 0; i < args.length; ++ i) {
-                logIndent(debugIndentation, "call argument %d: %s", i, nodeToString(varsOnStack.remove()));
+            logIndent(debugIndentation, "call is on stack: %s with %d args", currentMethodCall.name, args.length);
+
+            boolean recordArgument = false;
+            if (currentMethodCall.name.equals(subjectMethodCall.name) && currentMethodCall.owner.equals(subjectMethodCall.owner)) {
+                logIndent(debugIndentation, "-- this call is actually our desired call");
+                recordArgument = true;
             }
+
+            for (int i = 0; i < args.length; ++ i) {
+                AbstractInsnNode argNode = varsOnStack.poll();
+                if (recordArgument && desiredArgumentCount == i) {
+                    if (argNode == null) {
+                        logIndent(debugIndentation, "warning: not recording argument (is null)");
+                    } else if (argNode.getClass() == LdcInsnNode.class) {
+                        possibleProviders.add(String.valueOf(((LdcInsnNode) argNode).cst));
+                    } else {
+                        logIndent(debugIndentation, "warning: not recording argument (is not LDC)");
+                    }
+                }
+
+                logIndent(debugIndentation, "call argument %d: %s", i, nodeToString(argNode));
+            }
+            logIndent(debugIndentation, "-- after this call, %d arguments are on the stack", varsOnStack.size());
         }
 
         for (Node successor : node.successors) {
             int level = debugIndentation;
             // these nodes clutter the output, suppress them
             if (node.instruction.getClass() != LabelNode.class && node.instruction.getClass() != LineNumberNode.class) {
-                logIndent(debugIndentation, "inspecting node: %s", nodeToString(node.instruction));
                 ++ level;
             }
 
-            Queue<AbstractInsnNode> copy = Collections.asLifoQueue(new ArrayDeque<AbstractInsnNode>(varsOnStack));
-            inspectNode(successor, copy, level);
+            inspectNode(successor, copyQueue(varsOnStack), level);
         }
     }
 
+    private Queue<AbstractInsnNode> copyQueue(Queue<AbstractInsnNode> varsOnStack) {
+        List<AbstractInsnNode> varsReversed = new ArrayList<>(varsOnStack);
+        // we need to reverse the content as the queue is a LIFO queue
+        Collections.reverse(varsReversed);
+
+        return new ArrayDeque<AbstractInsnNode>(varsOnStack);
+    }
+
     private String nodeToString(AbstractInsnNode instruction) {
+        if (instruction == null) {
+            return null;
+        }
+
         if (instruction.getClass() == LdcInsnNode.class) {
             return "LDC " + ((LdcInsnNode) instruction).cst;
         }
 
         if (instruction.getClass() == MethodInsnNode.class) {
-            return "Method " + ((MethodInsnNode) instruction).name + " " + ((MethodInsnNode) instruction).desc;
+            return "Call Method " + ((MethodInsnNode) instruction).name + " " + ((MethodInsnNode) instruction).desc;
         }
 
         if (instruction.getClass() == VarInsnNode.class) {
